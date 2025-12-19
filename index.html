@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Дизайн-токены</title>
+		<link rel="stylesheet" href="style.css" />
+	</head>
+	<body>
+		<div class="container">
+			<!-- Левая панель: список коллекций -->
+			<div class="sidebar">
+				<!-- Секция коллекций -->
+				<div class="collections-section">
+					<div class="collections-section__title">Коллекции</div>
+					<div id="collectionsContainer" class="collections">
+						<div class="loading">
+							<i class="fas fa-spinner fa-spin"></i> Загрузка...
+						</div>
+					</div>
+				</div>
+
+				<!-- Секция дерева токенов -->
+				<div class="tokens-tree">
+					<div class="collections-section__title">Структура токенов</div>
+					<div id="tokensTreeContainer">
+						<div class="loading">
+							<i class="fas fa-spinner fa-spin"></i> Выберите коллекцию
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Правая панель: детали токенов выбранной коллекции -->
+			<div id="variablesPanel" class="variables-panel">
+				<div class="variables-panel__header">
+					<div class="variables-panel__title">Выберите коллекцию</div>
+					<div class="variables-panel__subtitle">Токены отобразятся здесь</div>
+				</div>
+				<div id="variablesTableContainer">
+					<!-- Сюда будет вставлена таблица через JS -->
+					<div class="loading">
+						<i class="fas fa-inbox"></i> Нет данных для отображения
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			// Вспомогательные функции для форматирования данных
+			function rgbToHex(r, g, b) {
+				return (
+					'#' +
+					[r, g, b]
+						.map(x => {
+							const hex = Math.round(x * 255).toString(16)
+							return hex.length === 1 ? '0' + hex : hex
+						})
+						.join('')
+						.toUpperCase()
+				)
+			}
+
+			function formatValue(type, valuesByMode) {
+				if (!valuesByMode || Object.keys(valuesByMode).length === 0) {
+					return 'N/A'
+				}
+
+				// Берём значение из первого режима (обычно Light)
+				const firstModeValue = Object.values(valuesByMode)[0]
+				if (!firstModeValue) return 'N/A'
+
+				if (type === 'COLOR') {
+					if (firstModeValue.type === 'VARIABLE_ALIAS') {
+						return `→ Ссылка на токен`
+					}
+					if (firstModeValue.r !== undefined) {
+						const hex = rgbToHex(
+							firstModeValue.r,
+							firstModeValue.g,
+							firstModeValue.b
+						)
+						const alpha =
+							firstModeValue.a !== 1 && firstModeValue.a !== undefined
+								? `, ${Math.round(firstModeValue.a * 100)}%`
+								: ''
+						return `${hex}${alpha}`
+					}
+				}
+
+				if (type === 'FLOAT') return `${firstModeValue}px`
+				if (type === 'STRING') return `"${firstModeValue}"`
+				if (type === 'BOOLEAN') return firstModeValue ? 'true' : 'false'
+
+				return String(firstModeValue)
+			}
+
+			function getColorStyle(type, valuesByMode) {
+				if (type !== 'COLOR') return ''
+
+				const firstModeValue = Object.values(valuesByMode)[0]
+				if (!firstModeValue || firstModeValue.type === 'VARIABLE_ALIAS') {
+					// Шахматный фон для токенов-ссылок
+					return 'background: linear-gradient(45deg, #f8f9fa 25%, #e9ecef 25%, #e9ecef 50%, #f8f9fa 50%, #f8f9fa 75%, #e9ecef 75%); background-size: 10px 10px;'
+				}
+
+				if (firstModeValue.r !== undefined) {
+					const r = Math.round(firstModeValue.r * 255)
+					const g = Math.round(firstModeValue.g * 255)
+					const b = Math.round(firstModeValue.b * 255)
+					const a = firstModeValue.a !== undefined ? firstModeValue.a : 1
+					return `background: rgba(${r}, ${g}, ${b}, ${a});`
+				}
+
+				return ''
+			}
+
+			// Загрузка данных с сервера
+			async function loadData() {
+				try {
+					const [collectionsRes, variablesRes] = await Promise.all([
+						fetch('/api/collections'),
+						fetch('/api/variables'),
+					])
+
+					if (!collectionsRes.ok || !variablesRes.ok) {
+						throw new Error(`Ошибка сервера: ${collectionsRes.status}`)
+					}
+
+					const collectionsData = await collectionsRes.json()
+					const variablesData = await variablesRes.json()
+
+					if (!collectionsData.success || !variablesData.success) {
+						throw new Error('Некорректный формат данных от сервера')
+					}
+
+					// Сохраняем данные в глобальной переменной для дальнейшего использования
+					window.appData = {
+						collections: collectionsData.data || [],
+						variables: variablesData.data || [],
+					}
+
+					displayCollections(
+						window.appData.collections,
+						window.appData.variables
+					)
+
+					// Автоматически выбираем первую коллекцию, если она есть
+					if (window.appData.collections.length > 0) {
+						setTimeout(() => {
+							const firstCollection = document.querySelector('.collection')
+							if (firstCollection) firstCollection.click()
+						}, 100)
+					}
+				} catch (error) {
+					document.getElementById(
+						'collectionsContainer'
+					).innerHTML = `<div class="error"><i class="fas fa-exclamation-triangle"></i> Ошибка: ${error.message}</div>`
+					console.error('Ошибка загрузки:', error)
+				}
+			}
+
+			// Отображение списка коллекций в левой панели
+			function displayCollections(collections, variables) {
+				const container = document.getElementById('collectionsContainer')
+
+				if (!collections || collections.length === 0) {
+					container.innerHTML =
+						'<div class="error">Коллекции не найдены. Экспортируйте токены из Figma.</div>'
+					return
+				}
+
+				let html = ''
+				collections.forEach(collection => {
+					// Подсчитываем токены в этой коллекции
+					const varsInCollection = variables.filter(
+						v => v.collection_id === collection.id
+					)
+
+					html += `
+                    <div class="collection" data-collection-id="${
+											collection.id
+										}">
+                        <span class="collection__name">${
+													collection.name || 'Без названия'
+												}</span>
+                        <span class="collection__count">${
+													varsInCollection.length
+												} токенов</span>
+                    </div>
+                `
+				})
+
+				container.innerHTML = html
+
+				// Добавляем обработчики клика на коллекции
+				document.querySelectorAll('.collection').forEach(collectionEl => {
+					collectionEl.addEventListener('click', function () {
+						// Убираем активный класс у всех коллекций
+						document.querySelectorAll('.collection').forEach(el => {
+							el.classList.remove('active')
+						})
+						// Добавляем активный класс текущей коллекции
+						this.classList.add('active')
+
+						const collectionId = this.getAttribute('data-collection-id')
+						const collection = collections.find(c => c.id === collectionId)
+						const collectionVariables = variables.filter(
+							v => v.collection_id === collectionId
+						)
+
+						displayVariablesForCollection(collection, collectionVariables)
+					})
+				})
+			}
+
+			// Отображение токенов выбранной коллекции в правой панели
+			function displayVariablesForCollection(collection, variables) {
+				const header = document.querySelector('.variables-panel__header')
+				const tableContainer = document.getElementById(
+					'variablesTableContainer'
+				)
+
+				if (!collection || !variables || variables.length === 0) {
+					header.innerHTML = `
+                    <div class="variables-panel__title">${
+											collection?.name || 'Коллекция'
+										}</div>
+                    <div class="variables-panel__subtitle">Нет токенов в этой коллекции</div>
+                `
+					tableContainer.innerHTML =
+						'<div class="loading"><i class="fas fa-inbox"></i> В коллекции нет токенов</div>'
+					return
+				}
+
+				// Обновляем заголовок
+				header.innerHTML = `
+                <div class="variables-panel__title">${collection.name}</div>
+                <div class="variables-panel__subtitle">${variables.length} токенов</div>
+            `
+
+				// Создаём таблицу
+				let tableHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 40%;">Наименование</th>
+                            <th style="width: 40%;">Значение</th>
+                            <th style="width: 20%;">Тип</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `
+
+				variables.forEach(variable => {
+					const valueStr = formatValue(
+						variable.type,
+						safeJsonParse(variable.values_by_mode)
+					)
+					const colorStyle = getColorStyle(
+						variable.type,
+						safeJsonParse(variable.values_by_mode)
+					)
+					const isColor = variable.type === 'COLOR'
+
+					tableHTML += `
+                    <tr class="token-row">
+                        <td class="token-name">${variable.name}</td>
+                        <td class="token-value">
+                            ${
+															isColor
+																? `<span class="color-preview" style="${colorStyle}"></span>`
+																: ''
+														}
+                            ${valueStr}
+                        </td>
+                        <td>
+                            <span class="token-type">${getTypeLabel(
+															variable.type
+														)}</span>
+                        </td>
+                    </tr>
+                `
+				})
+
+				tableHTML += `
+                    </tbody>
+                </table>
+            `
+
+				tableContainer.innerHTML = tableHTML
+			}
+
+			function safeJsonParse(data) {
+				if (typeof data === 'string') {
+					try {
+						return JSON.parse(data)
+					} catch {
+						return {}
+					}
+				}
+				return data || {}
+			}
+
+			function getTypeLabel(type) {
+				const labels = {
+					COLOR: 'Цвет',
+					FLOAT: 'Число',
+					STRING: 'Текст',
+					BOOLEAN: 'Логический',
+				}
+				return labels[type] || type
+			}
+
+			// Загружаем данные при загрузке страницы
+			document.addEventListener('DOMContentLoaded', loadData)
+
+			// Опционально: автообновление каждые 60 секунд
+			// setInterval(loadData, 60000);
+		</script>
+	</body>
+</html>

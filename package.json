@@ -1,0 +1,26 @@
+{
+	"name": "figma-tokens-server",
+	"version": "1.0.0",
+	"main": "server.js",
+	"scripts": {
+		"server": "nodemon server.js",
+		"client": "cd client && npm run dev",
+		"dev": "concurrently \"npm run server\" \"npm run client\"",
+		"build": "cd client && npm run build",
+		"start": "NODE_ENV=production node server.js"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"description": "",
+	"dependencies": {
+		"cors": "^2.8.5",
+		"dotenv": "^17.2.3",
+		"express": "^5.2.1",
+		"mysql2": "^3.15.3"
+	},
+	"devDependencies": {
+		"concurrently": "^9.2.1",
+		"nodemon": "^3.1.11"
+	}
+}

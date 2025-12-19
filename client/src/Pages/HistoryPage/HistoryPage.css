@@ -1,0 +1,84 @@
+.history-page {
+	display: flex;
+	flex-direction: column;
+	gap: 1.25vw;
+	width: 90vmin;
+	height: 90vmin;
+}
+
+.history-page__header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.8vw 1.2vw;
+	border-bottom: 0.05vw solid #e5e5e7;
+	background: white;
+	border-radius: 1.25vw;
+}
+
+.history-page__header-title {
+	display: flex;
+	align-items: center;
+	gap: 0.5vw;
+}
+
+.history-page__header-title h2 {
+	margin: 0;
+	padding: 0;
+}
+
+.history-page__header-title span {
+	color: #86868b;
+	background: #e5e5e7;
+	padding: 0.15vw 0.4vw;
+	border-radius: 0.3vw;
+	font-weight: 500;
+	flex-shrink: 0;
+}
+
+.history-page__collection-selector {
+	display: flex;
+	align-items: center;
+	gap: 0.5vw;
+}
+
+.history-page__collection-selector label {
+	color: #86868b;
+	font-weight: 500;
+}
+
+.history-page__collection-selector select {
+	padding: 0.3vw 0.5vw;
+	border: 0.05vw solid #d2d2d7;
+	border-radius: 1.25vw;
+	color: #1d1d1f;
+	background: white;
+	cursor: pointer;
+	transition: border-color 0.2s;
+	width: 12.199vw;
+}
+
+.history-page__collection-selector select:hover {
+	border-color: #86868b;
+}
+
+.history-page__collection-selector select:focus {
+	outline: none;
+	border-color: #007aff;
+	box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.history-page__loading-container {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 16px;
+	color: #86868b;
+}
+
+.history-page__loading-container i {
+	font-size: 24px;
+	color: #86868b;
+}

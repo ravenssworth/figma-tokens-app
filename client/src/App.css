@@ -1,0 +1,35 @@
+.container {
+	display: flex;
+	background: white;
+	border-radius: 1.25vw;
+	overflow: hidden;
+	box-shadow: 0 0.417vw 2.5vw rgba(0, 0, 0, 0.08);
+	width: 90vmin;
+	height: 90vmin;
+}
+
+.sidebar {
+	border-right: 0.104vw solid #e5e5e7;
+	width: 30%;
+}
+
+/* Правая панель с таблицей токенов */
+.variables-panel {
+	flex: 1;
+	overflow-y: auto;
+	max-height: 100%;
+	box-sizing: border-box;
+}
+
+/* Состояния загрузки и ошибок */
+.loading,
+.error {
+	padding: 4.167vw;
+	text-align: center;
+	color: #86868b;
+	font-size: 1.563vw;
+}
+
+.error {
+	color: #ff3b30;
+}

@@ -1,0 +1,151 @@
+.history-panel {
+	background: white;
+	border-radius: 1.25vw;
+	overflow: auto;
+	box-shadow: 0 0.417vw 2.5vw rgba(0, 0, 0, 0.08);
+	width: 100%;
+	height: 100%;
+}
+
+.history-panel__header {
+	display: flex;
+	padding: 0.8vw 1.2vw;
+	justify-content: space-between;
+	align-items: center;
+	border-bottom: 0.05vw solid #e5e5e7;
+}
+
+.history-panel__header-title {
+	display: flex;
+	align-items: center;
+	gap: 0.5vw;
+}
+
+.history-panel__header-title h2 {
+	margin: 0;
+	padding: 0;
+}
+
+.history-panel__date-range-selector {
+	display: flex;
+	align-items: center;
+	flex-direction: column;
+	gap: 0.3vw;
+}
+
+.history-panel__header-title span {
+	color: #86868b;
+	background: #e5e5e7;
+	padding: 0.15vw 0.4vw;
+	border-radius: 1.25vw;
+	font-weight: 500;
+	flex-shrink: 0;
+}
+
+.history-panel__date-input-group {
+	display: flex;
+	align-items: center;
+	gap: 0.3vw;
+}
+
+.history-panel__date-input-group input {
+	width: 5.5vw;
+	padding: 0.3vw 0.5vw;
+	border-radius: 1.25vw;
+	border: 0.05vw solid #e5e5e7;
+	color: #1d1d1f;
+}
+
+.history-panel__date-range-selector button {
+	width: 100%;
+	padding: 0.3vw 0.5vw;
+	border-radius: 1.25vw;
+	border: 0.05vw solid #e5e5e7;
+	color: #1d1d1f;
+	background: white;
+	cursor: pointer;
+}
+
+.history-panel__list {
+	display: flex;
+	flex-direction: column;
+	padding: 0.8vw 1.2vw;
+	gap: 1vw;
+}
+
+.history-record {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5vw;
+	padding: 0.8vw 0;
+	border-bottom: 0.05vw solid #e5e5e7;
+}
+
+.history-record__header {
+	display: flex;
+	gap: 0.5vw;
+	align-items: center;
+}
+
+.history-record__body {
+	display: flex;
+	gap: 0.5vw;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.history-record__variable-info {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+}
+
+.history-record__variable-type {
+	color: #86868b;
+	font-size: 0.4vw;
+}
+
+.history-record__values {
+	display: flex;
+	gap: 0.5vw;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.history-record__value-content {
+	display: flex;
+	align-items: center;
+}
+
+.history-record__badge {
+	color: #86868b;
+	background: #e5e5e7;
+	padding: 0.15vw 0.4vw;
+	border-radius: 0.3vw;
+	font-weight: 500;
+}
+
+.history-record__badge--created {
+	background: #8ce681;
+	color: #ffffff;
+}
+
+.history-record__badge--updated {
+	background: #9ecdff;
+	color: #ffffff;
+}
+
+.history-panel__loading {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	min-height: 100%;
+}
+
+.history-panel__empty {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	min-height: 100%;
+}
