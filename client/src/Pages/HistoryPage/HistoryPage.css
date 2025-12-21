@@ -2,8 +2,8 @@
 	display: flex;
 	flex-direction: column;
 	gap: 1.25vw;
-	width: 90vmin;
-	height: 90vmin;
+	width: 45vw;
+	height: 45vw;
 }
 
 .history-page__header {

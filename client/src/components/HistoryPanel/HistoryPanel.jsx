@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { rgbToHex, getColorStyle } from '../../utils/tokenUtils'
+import {
+	getColorStyle,
+	getTypeLabel,
+	formatValue,
+} from '../../utils/tokenUtils'
 import './HistoryPanel.css'
 
 export function HistoryPanel({ collection, variables: propsVariables }) {
@@ -8,9 +12,11 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 	const [selectedVariable, setSelectedVariable] = useState(null)
 	const [startDate, setStartDate] = useState('')
 	const [endDate, setEndDate] = useState('')
-	const [variables, setVariables] = useState([])
+	const [allVariables, setAllVariables] = useState([])
+	const [currentCollectionVariables, setCurrentCollectionVariables] = useState(
+		[]
+	)
 
-	// Функция сброса периода на последние 7 дней
 	const resetPeriod = () => {
 		const end = new Date()
 		const start = new Date()
@@ -20,49 +26,71 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		setStartDate(start.toISOString().split('T')[0])
 	}
 
-	// Инициализация периода при монтировании
 	useEffect(() => {
 		resetPeriod()
 	}, [])
 
-	// Загрузка переменных коллекции
+	useEffect(() => {
+		const loadAllVariables = async () => {
+			try {
+				const collectionsResponse = await fetch('/api/collections')
+				if (!collectionsResponse.ok) return
+				const collectionsData = await collectionsResponse.json()
+
+				if (collectionsData.success && Array.isArray(collectionsData.data)) {
+					const allVars = []
+					for (const col of collectionsData.data) {
+						const varsResponse = await fetch(
+							`/api/variables?collectionId=${col.id}`
+						)
+						if (varsResponse.ok) {
+							const varsData = await varsResponse.json()
+							if (varsData.success && Array.isArray(varsData.data)) {
+								allVars.push(...varsData.data)
+							}
+						}
+					}
+					setAllVariables(allVars)
+				}
+			} catch (error) {
+				console.error('Ошибка загрузки всех переменных:', error)
+			}
+		}
+
+		loadAllVariables()
+	}, [])
+
 	useEffect(() => {
 		if (!collection?.id) {
-			setVariables([])
+			setCurrentCollectionVariables([])
 			return
 		}
 
-		const loadVariables = async () => {
+		const loadCurrentVariables = async () => {
 			try {
 				const response = await fetch(
 					`/api/variables?collectionId=${collection.id}`
 				)
-				if (!response.ok) {
-					throw new Error(`HTTP error! status: ${response.status}`)
-				}
+				if (!response.ok) return
 				const data = await response.json()
-				if (data.success) {
-					setVariables(Array.isArray(data.data) ? data.data : [])
-				} else {
-					setVariables([])
+				if (data.success && Array.isArray(data.data)) {
+					setCurrentCollectionVariables(data.data)
 				}
 			} catch (error) {
-				console.error('Ошибка загрузки переменных:', error)
-				setVariables([])
+				console.error('Ошибка загрузки переменных текущей коллекции:', error)
+				setCurrentCollectionVariables([])
 			}
 		}
 
-		// Если переменные переданы через props, используем их, иначе загружаем
 		if (propsVariables && Array.isArray(propsVariables)) {
-			setVariables(propsVariables)
+			setCurrentCollectionVariables(propsVariables)
 		} else {
-			loadVariables()
+			loadCurrentVariables()
 		}
 	}, [collection, collection?.id, propsVariables])
 
-	// Загрузка истории изменений
 	useEffect(() => {
-		if (!collection || !variables || variables.length === 0) {
+		if (!collection || currentCollectionVariables.length === 0) {
 			setHistory([])
 			setLoading(false)
 			return
@@ -71,9 +99,8 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		const loadHistory = async () => {
 			setLoading(true)
 			try {
-				// Получаем историю для всей коллекции
 				const responses = await Promise.all(
-					variables.map(v =>
+					currentCollectionVariables.map(v =>
 						fetch(`/api/variables/${v.id}/history`)
 							.then(res => res.json())
 							.then(data => ({
@@ -91,7 +118,6 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 					)
 				)
 
-				// Объединяем и сортируем по дате
 				const allHistory = responses
 					.flatMap(response => {
 						if (!response.history || !Array.isArray(response.history)) {
@@ -124,19 +150,16 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		}
 
 		loadHistory()
-	}, [collection, variables])
+	}, [collection, currentCollectionVariables])
 
-	// Ранний возврат после всех хуков
 	if (!collection) {
 		return (
 			<div className='history-empty'>
-				<i className='fas fa-history'></i>
 				<p>Выберите коллекцию для просмотра истории изменений</p>
 			</div>
 		)
 	}
 
-	// Фильтрация по выбранному периоду
 	const filteredHistory = history.filter(record => {
 		if (!startDate && !endDate) return true
 
@@ -144,7 +167,6 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		const start = startDate ? new Date(startDate) : null
 		const end = endDate ? new Date(endDate) : null
 
-		// Устанавливаем время для корректного сравнения
 		if (start) start.setHours(0, 0, 0, 0)
 		if (end) end.setHours(23, 59, 59, 999)
 
@@ -155,12 +177,18 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		return isWithinRange
 	})
 
-	// Статистика изменений
 	const uniqueVariableIds = new Set(filteredHistory.map(h => h.variable_id))
 	const stats = {
 		totalChanges: filteredHistory.length,
 		uniqueVariables: uniqueVariableIds.size,
 		lastChange: filteredHistory[0]?.formattedDate || 'Нет изменений',
+	}
+
+	const changeTypeLabels = {
+		created: 'Создана',
+		updated: 'Изменена',
+		deleted: 'Удалена',
+		restored: 'Восстановлена',
 	}
 
 	return (
@@ -192,7 +220,6 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 							className='history-panel__reset-button'
 							onClick={resetPeriod}
 						>
-							<i className='fas fa-redo'></i>
 							Сбросить
 						</button>
 					</div>
@@ -205,7 +232,6 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 				</div>
 			) : filteredHistory.length === 0 ? (
 				<div className='history-panel__empty'>
-					<i className='fas fa-calendar-check'></i>
 					<p>Нет изменений за выбранный период</p>
 				</div>
 			) : (
@@ -255,18 +281,12 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 							>
 								<div className='history-record__header'>
 									<div className='history-record__date'>
-										<i className='fas fa-clock' />
 										{record.formattedDate}
 									</div>
 									<div
 										className={`history-record__badge history-record__badge--${changeType}`}
 									>
-										<i
-											className={`fas ${
-												isCreated ? 'fa-plus-circle' : 'fa-edit'
-											}`}
-										/>
-										{isCreated ? 'Создана' : 'Изменена'}
+										{changeTypeLabels[record.change_type] || 'Изменена'}
 									</div>
 								</div>
 
@@ -276,7 +296,7 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 											{record.variable.name}
 										</div>
 										<div className='history-record__variable-type'>
-											{record.variable.type}
+											{getTypeLabel(record.variable.type)}
 										</div>
 									</div>
 
@@ -290,14 +310,15 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 															style={getColorStyle(
 																record.variable.type,
 																currentValues,
-																variables
+																allVariables
 															)}
 														></span>
 													)}
 													<span className='history-record__value-text'>
-														{formatHistoryValue(
-															record.values_by_mode,
-															record.variable.type
+														{formatValue(
+															record.variable.type,
+															currentValues,
+															allVariables
 														)}
 													</span>
 												</div>
@@ -312,14 +333,15 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 																style={getColorStyle(
 																	record.variable.type,
 																	prevValues,
-																	variables
+																	allVariables
 																)}
 															></span>
 														)}
 														<span className='history-record__value-text'>
-															{formatHistoryValue(
-																prevRecord.values_by_mode,
-																record.variable.type
+															{formatValue(
+																record.variable.type,
+																prevValues,
+																allVariables
 															)}
 														</span>
 													</div>
@@ -333,14 +355,15 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 																style={getColorStyle(
 																	record.variable.type,
 																	currentValues,
-																	variables
+																	allVariables
 																)}
 															></span>
 														)}
 														<span className='history-record__value-text'>
-															{formatHistoryValue(
-																record.values_by_mode,
-																record.variable.type
+															{formatValue(
+																record.variable.type,
+																currentValues,
+																allVariables
 															)}
 														</span>
 													</div>
@@ -356,38 +379,4 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 			)}
 		</div>
 	)
-}
-
-// Функция форматирования значения для истории
-function formatHistoryValue(valuesByMode, type) {
-	if (!valuesByMode) return 'N/A'
-
-	try {
-		// Парсим JSON, если это строка
-		const values =
-			typeof valuesByMode === 'string' ? JSON.parse(valuesByMode) : valuesByMode
-
-		if (!values || typeof values !== 'object') return 'N/A'
-
-		const firstMode = Object.values(values)[0]
-
-		if (!firstMode) return 'N/A'
-
-		if (type === 'COLOR') {
-			if (firstMode.type === 'VARIABLE_ALIAS') {
-				return `→ ${firstMode.id}`
-			}
-			if (firstMode.r !== undefined) {
-				const hexColor = rgbToHex(firstMode.r, firstMode.g, firstMode.b)
-				return hexColor
-			}
-		}
-
-		return typeof firstMode === 'object'
-			? JSON.stringify(firstMode)
-			: String(firstMode)
-	} catch (error) {
-		console.error('Ошибка форматирования значения:', error)
-		return 'N/A'
-	}
 }

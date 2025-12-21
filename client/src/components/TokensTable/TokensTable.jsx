@@ -13,23 +13,21 @@ export function TokensTable({
 	allVariables = [],
 	collection,
 	selectedGroup,
+	version,
 }) {
 	if (!variables || variables.length === 0) {
 		return (
 			<div className='loading'>
-				<i className='fas fa-inbox'></i> Нет данных для отображения
+				<strong className='fas fa-inbox'></strong> Нет данных для отображения
 			</div>
 		)
 	}
 
-	// Функция для получения отображаемого имени переменной
-	// Всегда показываем только последнюю часть пути (имя токена)
 	const getDisplayName = fullName => {
 		const parts = fullName.split('/')
 		return parts[parts.length - 1]
 	}
 
-	// Функция для группировки переменных по их полному пути
 	const groupVariablesByPath = (variables, selectedGroup) => {
 		const groups = {}
 
@@ -37,10 +35,8 @@ export function TokensTable({
 			const parts = variable.name.split('/')
 
 			if (parts.length > 1) {
-				// Полный путь без последней части
 				const folderPath = parts.slice(0, -1).join('/')
 
-				// Пропускаем группы, которые уже отображаются в выбранной группе
 				if (selectedGroup && folderPath.startsWith(selectedGroup + '/')) {
 					const subPath = folderPath.substring(selectedGroup.length + 1)
 					if (subPath.includes('/')) {
@@ -73,7 +69,6 @@ export function TokensTable({
 					displayName: getDisplayName(variable.name),
 				})
 			} else {
-				// Для переменных без пути
 				if (!groups['root']) {
 					groups['root'] = {
 						path: 'root',
@@ -92,20 +87,16 @@ export function TokensTable({
 		return groups
 	}
 
-	// Если выбрана конкретная группа, показываем только её содержимое
 	if (selectedGroup && selectedGroup !== 'all') {
-		// Проверяем, есть ли вложенные группы (если после удаления префикса остается более одной части)
 		const hasNestedGroups = variables.some(variable => {
 			if (!variable.name) return false
 			const groupPrefix = selectedGroup + '/'
 			if (!variable.name.startsWith(groupPrefix)) return false
 			const remainingPath = variable.name.substring(groupPrefix.length)
 			const parts = remainingPath.split('/')
-			// Если после удаления префикса остается более одной части, значит есть вложенность
 			return parts.length > 1
 		})
 
-		// Если есть вложенные группы, используем группировку
 		if (hasNestedGroups) {
 			const groupedVariables = groupVariablesByPath(variables, selectedGroup)
 			const groupsArray = Object.values(groupedVariables)
@@ -133,7 +124,7 @@ export function TokensTable({
 									<tr className='group-header'>
 										<td colSpan='3'>
 											<div className='table__group-header'>
-												<i className='fas fa-folder group-icon'></i>
+												<strong className='fas fa-folder group-icon'></strong>
 												<span className='table__group-name'>{group.name}</span>
 											</div>
 										</td>
@@ -182,7 +173,6 @@ export function TokensTable({
 			)
 		}
 
-		// Если нет вложенных групп, показываем без группировки
 		return (
 			<div className='tokens-table-container'>
 				<div className='variables-panel__header'>
@@ -236,7 +226,6 @@ export function TokensTable({
 		)
 	}
 
-	// Если выбрано "Все" - показываем с группировкой
 	const groupedVariables = groupVariablesByPath(variables, selectedGroup)
 	const groupsArray = Object.values(groupedVariables)
 
@@ -245,6 +234,34 @@ export function TokensTable({
 			<div className='variables-panel__header'>
 				<div className='variables-panel__title'>
 					{collection?.name || 'Коллекция'}
+
+					{version && (
+						<div className='variables-panel__version-info-tooltip'>
+							<span className='variables-panel__version-info-icon'>🛈</span>
+							<div className='variables-panel__version-info-popup'>
+								<div className='variables-panel__version-info-content'>
+									<h4>Информация о версии</h4>
+									<p className='variables-panel__version-info-row'>
+										<strong>Версия:</strong> {version.version_name}
+									</p>
+									<p className='variables-panel__version-info-row'>
+										<strong>Создана:</strong>{' '}
+										{new Date(version.created_at).toLocaleString('ru-RU')}
+									</p>
+									{version.description && (
+										<p className='variables-panel__version-info-row'>
+											<strong>Описание:</strong> {version.description}
+										</p>
+									)}
+									{version.version_tag && (
+										<p className='variables-panel__version-info-row'>
+											<strong>Тег:</strong> {version.version_tag}
+										</p>
+									)}
+								</div>
+							</div>
+						</div>
+					)}
 				</div>
 			</div>
 

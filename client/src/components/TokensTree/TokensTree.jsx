@@ -4,7 +4,6 @@ import './TokensTree.css'
 export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 	const [expandedGroups, setExpandedGroups] = useState(new Set(['all']))
 
-	// Строим дерево групп с помощью useMemo для оптимизации
 	const { groups, rootGroups } = useMemo(() => {
 		if (!variables || variables.length === 0) {
 			return { groups: {}, rootGroups: [] }
@@ -13,13 +12,11 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 		const groups = {}
 		const rootGroups = []
 
-		// Сначала создаем все группы
 		variables.forEach(variable => {
 			if (!variable.name) return
 
 			const parts = variable.name.split('/')
 
-			// Создаем группы для всех частей пути, кроме последней (имя переменной)
 			let currentPath = ''
 			for (let i = 0; i < parts.length - 1; i++) {
 				currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i]
@@ -35,7 +32,6 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 						allVariableIds: new Set(),
 					}
 
-					// Если это корневая группа, добавляем в rootGroups
 					if (!groups[currentPath].parent) {
 						rootGroups.push(groups[currentPath])
 					}
@@ -43,28 +39,23 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 			}
 		})
 
-		// Заполняем children и подсчитываем переменные
 		variables.forEach(variable => {
 			if (!variable.name) return
 
 			const parts = variable.name.split('/')
 
-			// Добавляем переменную во все родительские группы
 			let currentPath = ''
 			for (let i = 0; i < parts.length - 1; i++) {
 				currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i]
 				const group = groups[currentPath]
 
 				if (group) {
-					// Добавляем переменную в эту группу
 					group.allVariableIds.add(variable.id)
 
-					// Если это последний уровень перед переменной, добавляем в direct variables
 					if (i === parts.length - 2) {
 						group.variableIds.add(variable.id)
 					}
 
-					// Если есть следующий уровень, добавляем его в children
 					if (i < parts.length - 2) {
 						const nextPath = currentPath + '/' + parts[i + 1]
 						if (!group.children.includes(nextPath)) {
@@ -78,7 +69,6 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 		return { groups, rootGroups }
 	}, [variables])
 
-	// Переключение раскрытия группы
 	const toggleGroup = (groupPath, e) => {
 		e.stopPropagation()
 		const newExpanded = new Set(expandedGroups)
@@ -90,20 +80,17 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 		setExpandedGroups(newExpanded)
 	}
 
-	// Выбор группы
 	const handleSelectGroup = groupPath => {
 		if (onSelectGroup) {
 			onSelectGroup(groupPath)
 		}
 	}
 
-	// Проверка, является ли группа дочерней для выбранной
 	const isChildOfSelected = (groupPath, selectedGroup) => {
 		if (!selectedGroup || selectedGroup === 'all') return false
 		return groupPath.startsWith(selectedGroup + '/')
 	}
 
-	// Рекурсивный рендер групп
 	const renderGroup = (groupPath, groups) => {
 		const group = groups[groupPath]
 		if (!group) return null
@@ -141,7 +128,7 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 					) : (
 						<div className='tokens-tree-item__toggle-placeholder'></div>
 					)}
-					<i className='fas fa-folder group-icon'></i>
+
 					<span className='tokens-tree-item__name'>{group.name}</span>
 					<span className='tokens-tree-item__count'>
 						{group.allVariableIds.size}
@@ -158,11 +145,7 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 	}
 
 	if (!variables || variables.length === 0) {
-		return (
-			<div className='loading'>
-				<i className='fas fa-spinner fa-spin'></i> Выберите коллекцию
-			</div>
-		)
+		return <div className='loading'>Выберите коллекцию</div>
 	}
 
 	return (
@@ -189,9 +172,7 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 					</div>
 				</div>
 			) : (
-				<div className='tokens-tree__loading'>
-					<i className='fas fa-folder-open'></i> Нет групп для отображения
-				</div>
+				<div className='tokens-tree__loading'>Нет групп для отображения</div>
 			)}
 		</div>
 	)

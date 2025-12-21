@@ -7,7 +7,10 @@
 }
 
 .variables-panel__title {
+	display: flex;
+	align-items: center;
 	color: #1d1d1f;
+	gap: 0.5vw;
 }
 
 .variables-panel__subtitle {
@@ -84,4 +87,60 @@ th:last-child {
 .table__group-name {
 	margin-right: 0.5vw;
 	color: #1d1d1f;
+}
+
+.variables-panel__version-info-tooltip {
+	position: relative;
+	display: inline-block;
+	cursor: help;
+}
+
+.variables-panel__version-info-icon {
+	color: #86868b;
+	font-size: 1vw;
+	transition: color 0.2s;
+}
+
+.variables-panel__version-info-icon:hover {
+	color: #007aff;
+}
+
+.variables-panel__version-info-popup {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	background: white;
+	border: 0.05vw solid #e5e5e7;
+	border-radius: 0.42vw;
+	box-shadow: 0 0.417vw 2.5vw rgba(0, 0, 0, 0.08);
+	padding: 0.8vw 1.2vw;
+	width: 20vw;
+	z-index: 1000;
+	opacity: 0;
+	visibility: hidden;
+	transform: translateY(-10px);
+	transition: all 0.3s ease;
+}
+
+.variables-panel__version-info-tooltip:hover
+	.variables-panel__version-info-popup {
+	opacity: 1;
+	visibility: visible;
+	transform: translateY(0);
+}
+
+.variables-panel__version-info-row {
+	margin: 8px 0;
+	line-height: 1.4;
+}
+
+.variables-panel__version-info-row strong {
+	color: #1d1d1f;
+	display: inline-block;
+	font-weight: 600;
+}
+
+.variables-panel__version-info-content h4 {
+	color: #007aff;
+	font-weight: 600;
 }

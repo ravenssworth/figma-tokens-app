@@ -34,7 +34,6 @@ export function HistoryPage() {
 			<div className='history-page__header'>
 				<div className='history-page__header-title'>
 					<h2>История изменений</h2>
-					<span>5</span>
 				</div>
 				<div className='history-page__collection-selector'>
 					<label htmlFor='collection-select'>Коллекция:</label>
@@ -57,7 +56,6 @@ export function HistoryPage() {
 
 			{loading ? (
 				<div className='history-page__loading-container'>
-					<i className='fas fa-spinner fa-spin'></i>
 					<p>Загрузка истории...</p>
 				</div>
 			) : (

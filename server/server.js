@@ -1,0 +1,401 @@
+const express = require('express')
+const cors = require('cors')
+const path = require('path')
+const app = express()
+const PORT = process.env.PORT || 3000
+
+app.use(cors())
+app.use(express.json())
+app.use(express.static(path.join(__dirname, './client_dist')))
+
+const pool = require('./database.js')
+
+const { hasVariableChanged, deepEqual } = require('./utils/tokensUtils')
+
+try {
+	const utils = require('./utils/tokensUtils.js')
+	console.log('Функции импортированы:', Object.keys(utils))
+} catch (error) {
+	console.error('Ошибка импорта:', error.message)
+}
+
+pool
+	.query('SELECT 1 + 1 AS solution')
+	.then(([rows]) =>
+		console.log(
+			'✅ Подключение к БД успешно. Результат теста:',
+			rows[0].solution
+		)
+	)
+	.catch(err => console.error('❌ Ошибка подключения к БД:', err.message))
+
+app.get('/', (req, res) => {
+	res.send('Сервер для приёма дизайн-токенов работает!')
+})
+
+app.post('/api/tokens', async (req, res) => {
+	console.log('🔄 Начинаю обработку полученных токенов...')
+	const { variables: newVariables, collections } = req.body
+
+	if (!newVariables || !collections) {
+		return res.status(400).json({
+			success: false,
+			error: 'Отсутствуют необходимые данные',
+		})
+	}
+
+	const connection = await pool.getConnection()
+
+	try {
+		await connection.beginTransaction()
+
+		const stats = { created: 0, updated: 0, deleted: 0, unchanged: 0 }
+
+		for (const collection of collections) {
+			await connection.execute(
+				`INSERT INTO collections (id, name, modes, created_at) 
+                 VALUES (?, ?, ?, NOW()) 
+                 ON DUPLICATE KEY UPDATE 
+                 name = VALUES(name), 
+                 modes = VALUES(modes)`,
+				[collection.id, collection.name, JSON.stringify(collection.modes)]
+			)
+		}
+
+		for (const collection of collections) {
+			const [existingVariables] = await connection.query(
+				'SELECT * FROM variables WHERE collection_id = ? AND is_deleted = FALSE',
+				[collection.id]
+			)
+
+			const existingVarMap = new Map()
+			existingVariables.forEach(v => existingVarMap.set(v.id, v))
+
+			const newVarsInCollection = newVariables.filter(
+				v => v.collectionId === collection.id
+			)
+			const newVarMap = new Map()
+			newVarsInCollection.forEach(v => newVarMap.set(v.id, v))
+
+			for (const newVar of newVarsInCollection) {
+				const existingVar = existingVarMap.get(newVar.id)
+
+				if (!existingVar) {
+					await connection.execute(
+						`INSERT INTO variables (id, name, type, values_by_mode, collection_id, created_at) 
+                         VALUES (?, ?, ?, ?, ?, NOW())`,
+						[
+							newVar.id,
+							newVar.name,
+							newVar.type,
+							JSON.stringify(newVar.valuesByMode),
+							collection.id,
+						]
+					)
+
+					await connection.execute(
+						`INSERT INTO variable_history (variable_id, values_by_mode, changed_at, change_type) 
+                         VALUES (?, ?, NOW(), 'created')`,
+						[newVar.id, JSON.stringify(newVar.valuesByMode)]
+					)
+
+					stats.created++
+					console.log(`   ➕ Создана: "${newVar.name}"`)
+				} else {
+					const hasChanged =
+						hasVariableChanged(
+							existingVar.values_by_mode,
+							newVar.valuesByMode
+						) || existingVar.name !== newVar.name
+
+					if (hasChanged) {
+						await connection.execute(
+							`UPDATE variables 
+                             SET name = ?, type = ?, values_by_mode = ?, updated_at = NOW()
+                             WHERE id = ?`,
+							[
+								newVar.name,
+								newVar.type,
+								JSON.stringify(newVar.valuesByMode),
+								newVar.id,
+							]
+						)
+
+						await connection.execute(
+							`INSERT INTO variable_history (variable_id, values_by_mode, changed_at, change_type) 
+                             VALUES (?, ?, NOW(), 'updated')`,
+							[newVar.id, JSON.stringify(newVar.valuesByMode)]
+						)
+
+						stats.updated++
+						console.log(`   ✏️ Обновлена: "${newVar.name}"`)
+					} else {
+						stats.unchanged++
+					}
+				}
+
+				existingVarMap.delete(newVar.id)
+			}
+
+			for (const deletedVar of existingVarMap.values()) {
+				await connection.execute(
+					`UPDATE variables 
+                     SET is_deleted = TRUE, deleted_at = NOW(), updated_at = NOW()
+                     WHERE id = ?`,
+					[deletedVar.id]
+				)
+
+				await connection.execute(
+					`INSERT INTO variable_history (variable_id, values_by_mode, changed_at, change_type) 
+                     VALUES (?, ?, NOW(), 'deleted')`,
+					[deletedVar.id, deletedVar.values_by_mode]
+				)
+
+				stats.deleted++
+				console.log(`   🗑️ Помечена как удалённая: "${deletedVar.name}"`)
+			}
+		}
+
+		await connection.commit()
+
+		console.log('\n📊 ИТОГИ ОБРАБОТКИ:')
+		console.log(`   Создано: ${stats.created}`)
+		console.log(`   Обновлено: ${stats.updated}`)
+		console.log(`   Удалено: ${stats.deleted}`)
+		console.log(`   Без изменений: ${stats.unchanged}`)
+
+		res.status(200).json({
+			success: true,
+			message: 'Обработка завершена',
+			stats: stats,
+		})
+	} catch (error) {
+		await connection.rollback()
+		console.error('❌ Ошибка при сохранении в БД:', error)
+		res.status(500).json({
+			success: false,
+			error: 'Ошибка при обработке данных',
+			details: error.message,
+		})
+	} finally {
+		connection.release()
+	}
+})
+
+app.get('/api/collections', async (req, res) => {
+	try {
+		const [rows] = await pool.query(
+			'SELECT * FROM collections ORDER BY created_at DESC'
+		)
+		res.json({ success: true, data: rows })
+	} catch (error) {
+		console.error('Ошибка получения коллекций:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
+app.get('/api/variables', async (req, res) => {
+	try {
+		const { collectionId } = req.query
+		let query =
+			'SELECT v.*, c.name as collection_name FROM variables v LEFT JOIN collections c ON v.collection_id = c.id'
+		const params = []
+
+		if (collectionId) {
+			query += ' WHERE v.collection_id = ?'
+			params.push(collectionId)
+		}
+
+		query += ' ORDER BY v.created_at DESC'
+		const [rows] = await pool.query(query, params)
+		res.json({ success: true, data: rows })
+	} catch (error) {
+		console.error('Ошибка получения переменных:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
+app.get('/api/variables/:id/history', async (req, res) => {
+	try {
+		const [rows] = await pool.query(
+			'SELECT * FROM variable_history WHERE variable_id = ? ORDER BY changed_at DESC',
+			[req.params.id]
+		)
+		res.json({ success: true, data: rows })
+	} catch (error) {
+		console.error('Ошибка получения истории:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
+app.get('/api/variables/parsed', async (req, res) => {
+	try {
+		const [variables] = await pool.query(`
+            SELECT v.*, c.name as collection_name 
+            FROM variables v 
+            LEFT JOIN collections c ON v.collection_id = c.id 
+            ORDER BY v.name
+        `)
+
+		const variableMap = {}
+		variables.forEach(v => {
+			v.parsedValues = JSON.parse(v.values_by_mode)
+			variableMap[v.id] = v
+		})
+
+		const resolveValue = (value, visited = new Set()) => {
+			if (!value || typeof value !== 'object' || visited.has(value.id)) {
+				return value
+			}
+
+			if (value.type === 'VARIABLE_ALIAS' && value.id) {
+				const targetVar = variableMap[value.id]
+				if (targetVar) {
+					visited.add(value.id)
+					const firstMode =
+						targetVar.parsedValues[Object.keys(targetVar.parsedValues)[0]]
+					return resolveValue(firstMode, visited)
+				}
+				return { error: `Unknown alias: ${value.id}` }
+			}
+
+			if (value.r !== undefined) {
+				return rgbToHex(value.r, value.g, value.b, value.a)
+			}
+
+			return value
+		}
+
+		const enhancedVariables = variables.map(v => {
+			const resolvedValues = {}
+
+			Object.entries(v.parsedValues).forEach(([modeId, value]) => {
+				resolvedValues[modeId] = resolveValue(value)
+			})
+
+			const firstModeValue = resolvedValues[Object.keys(resolvedValues)[0]]
+
+			return {
+				...v,
+				resolvedValue: firstModeValue,
+				isAlias:
+					v.parsedValues[Object.keys(v.parsedValues)[0]]?.type ===
+					'VARIABLE_ALIAS',
+				originalValues: v.parsedValues,
+			}
+		})
+
+		res.json({ success: true, data: enhancedVariables })
+	} catch (error) {
+		console.error('Ошибка получения переменных:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
+app.get('/api/collections/:collectionId/versions', async (req, res) => {
+	try {
+		const [rows] = await pool.query(
+			'SELECT * FROM collection_versions WHERE collection_id = ? ORDER BY created_at DESC',
+			[req.params.collectionId]
+		)
+		res.json({ success: true, data: rows })
+	} catch (error) {
+		console.error('Ошибка получения версий коллекции:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
+app.post('/api/collections/:collectionId/versions', async (req, res) => {
+	const { collectionId } = req.params
+	const { version_name, description, version_tag } = req.body
+
+	const connection = await pool.getConnection()
+	try {
+		await connection.beginTransaction()
+
+		const [variables] = await connection.query(
+			'SELECT * FROM variables WHERE collection_id = ?',
+			[collectionId]
+		)
+
+		const snapshotData = JSON.stringify(variables)
+
+		const [result] = await connection.query(
+			`INSERT INTO collection_versions 
+       (collection_id, version_name, version_tag, description, snapshot_data) 
+       VALUES (?, ?, ?, ?, ?)`,
+			[
+				collectionId,
+				version_name,
+				version_tag || 'draft',
+				description || '',
+				snapshotData,
+			]
+		)
+
+		await connection.commit()
+
+		const [newVersion] = await connection.query(
+			'SELECT * FROM collection_versions WHERE id = ?',
+			[result.insertId]
+		)
+
+		res.json({
+			success: true,
+			data: newVersion[0],
+			message: `Версия "${version_name}" создана`,
+		})
+	} catch (error) {
+		await connection.rollback()
+		console.error('Ошибка создания версии:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	} finally {
+		connection.release()
+	}
+})
+
+app.get('/api/versions/:versionId/variables', async (req, res) => {
+	try {
+		const [versions] = await pool.query(
+			'SELECT * FROM collection_versions WHERE id = ?',
+			[req.params.versionId]
+		)
+
+		if (versions.length === 0) {
+			return res
+				.status(404)
+				.json({ success: false, error: 'Версия не найдена' })
+		}
+
+		const version = versions[0]
+
+		let variables = []
+		if (typeof version.snapshot_data === 'string') {
+			try {
+				variables = JSON.parse(version.snapshot_data)
+			} catch (parseError) {
+				console.error('Ошибка парсинга snapshot_data:', parseError)
+				variables = []
+			}
+		} else {
+			variables = version.snapshot_data
+		}
+
+		variables.forEach(v => {
+			v.from_version = version.id
+			v.version_name = version.version_name
+		})
+
+		res.json({ success: true, data: variables })
+	} catch (error) {
+		console.error('Ошибка получения переменных версии:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
+app.listen(PORT, () => {
+	console.log(`🚀 Сервер запущен на http://localhost:${PORT}`)
+	console.log(
+		`📤 Endpoint для приёма токенов: POST http://localhost:${PORT}/api/tokens`
+	)
+})

@@ -5,19 +5,17 @@ export function CollectionsPanel({
 	collections,
 	selectedCollection,
 	onSelect,
-	variables = [], // добавляем переменные для подсчета
+	variables = [],
 }) {
-	// Используем useMemo для вычисления количества токенов в каждой коллекции
 	const tokenCounts = useMemo(() => {
 		if (!collections || !variables) return {}
 
 		const counts = {}
 		collections.forEach(col => {
-			// Подсчитываем количество переменных, принадлежащих этой коллекции
 			counts[col.id] = variables.filter(v => v.collection_id === col.id).length
 		})
 		return counts
-	}, [collections, variables]) // Зависимости: пересчитываем при изменении коллекций или переменных
+	}, [collections, variables])
 
 	if (!collections || collections.length === 0) {
 		return (

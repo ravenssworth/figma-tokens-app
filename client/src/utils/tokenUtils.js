@@ -1,3 +1,23 @@
+export function hasVariableChanged(oldValuesByMode, newValuesByMode) {
+	if (!oldValuesByMode || !newValuesByMode) return true
+
+	try {
+		const oldValues =
+			typeof oldValuesByMode === 'string'
+				? JSON.parse(oldValuesByMode)
+				: oldValuesByMode
+		const newValues =
+			typeof newValuesByMode === 'string'
+				? JSON.parse(newValuesByMode)
+				: newValuesByMode
+
+		return JSON.stringify(oldValues) !== JSON.stringify(newValues)
+	} catch (error) {
+		console.error('Ошибка сравнения значений:', error)
+		return true
+	}
+}
+
 export function rgbToHex(r, g, b) {
 	return (
 		'#' +
@@ -16,27 +36,47 @@ export function formatValue(type, valuesByMode, allVariables = []) {
 		return 'N/A'
 	}
 
-	const firstModeValue = Object.values(valuesByMode)[0]
+	if (
+		valuesByMode &&
+		valuesByMode.values &&
+		typeof valuesByMode.values === 'object'
+	) {
+		valuesByMode = valuesByMode.values
+	}
 
-	// Если это ссылка на переменную, находим её и показываем имя
-	if (firstModeValue.type === 'VARIABLE_ALIAS' && firstModeValue.id) {
-		// Ищем переменную по ID (проверяем точное совпадение)
+	let parsedValues = valuesByMode
+	if (typeof valuesByMode === 'string') {
+		try {
+			parsedValues = JSON.parse(valuesByMode)
+		} catch (e) {
+			return 'Invalid JSON'
+		}
+	}
+
+	const firstModeKey = Object.keys(parsedValues)[0]
+	if (!firstModeKey) return 'N/A'
+
+	const firstModeValue = parsedValues[firstModeKey]
+
+	if (
+		firstModeValue &&
+		firstModeValue.type === 'VARIABLE_ALIAS' &&
+		firstModeValue.id
+	) {
 		const referencedVariable = allVariables.find(
 			v =>
 				v.id === firstModeValue.id || String(v.id) === String(firstModeValue.id)
 		)
 
 		if (referencedVariable?.name) {
-			// Возвращаем полное имя переменной
 			return referencedVariable.name
 		}
 
-		// Если переменная не найдена, возвращаем fallback с ID для отладки
 		return `→ Ссылка (ID: ${firstModeValue.id})`
 	}
 
 	if (type === 'COLOR') {
-		if (firstModeValue.r !== undefined) {
+		if (firstModeValue && firstModeValue.r !== undefined) {
 			const hex = rgbToHex(firstModeValue.r, firstModeValue.g, firstModeValue.b)
 			const alpha =
 				firstModeValue.a !== 1 && firstModeValue.a !== undefined
@@ -56,7 +96,33 @@ export function formatValue(type, valuesByMode, allVariables = []) {
 export function getColorStyle(type, valuesByMode, allVariables = []) {
 	if (type !== 'COLOR') return {}
 
-	const firstModeValue = Object.values(valuesByMode)[0]
+	if (
+		valuesByMode &&
+		valuesByMode.values &&
+		typeof valuesByMode.values === 'object'
+	) {
+		valuesByMode = valuesByMode.values
+	}
+
+	let parsedValues = valuesByMode
+	if (typeof valuesByMode === 'string') {
+		try {
+			parsedValues = JSON.parse(valuesByMode)
+		} catch (e) {
+			return {}
+		}
+	}
+
+	const firstModeKey = Object.keys(parsedValues)[0]
+	if (!firstModeKey) {
+		return {
+			background:
+				'linear-gradient(45deg, #f8f9fa 25%, #e9ecef 25%, #e9ecef 50%, #f8f9fa 50%, #f8f9fa 75%, #e9ecef 75%)',
+			backgroundSize: '0.5vw 0.5vw',
+		}
+	}
+
+	const firstModeValue = parsedValues[firstModeKey]
 	if (!firstModeValue) {
 		return {
 			background:
@@ -65,7 +131,6 @@ export function getColorStyle(type, valuesByMode, allVariables = []) {
 		}
 	}
 
-	// Если это ссылка на переменную, находим её и получаем цвет
 	if (firstModeValue.type === 'VARIABLE_ALIAS' && firstModeValue.id) {
 		const referencedVariable = allVariables.find(
 			v =>
@@ -73,13 +138,24 @@ export function getColorStyle(type, valuesByMode, allVariables = []) {
 		)
 
 		if (referencedVariable) {
-			// Парсим значения референсной переменной
-			const referencedValues =
-				referencedVariable.parsedValues ||
-				safeJsonParse(referencedVariable.values_by_mode)
-			const referencedFirstValue = Object.values(referencedValues)[0]
+			let referencedValues = referencedVariable.values_by_mode
 
-			// Если у референсной переменной есть цвет, используем его
+			if (typeof referencedValues === 'string') {
+				try {
+					referencedValues = JSON.parse(referencedValues)
+				} catch (e) {
+					referencedValues = {}
+				}
+			}
+
+			if (referencedValues && referencedValues.values) {
+				referencedValues = referencedValues.values
+			}
+
+			const referencedFirstValue = referencedValues
+				? Object.values(referencedValues)[0]
+				: null
+
 			if (referencedFirstValue && referencedFirstValue.r !== undefined) {
 				const r = Math.round(referencedFirstValue.r * 255)
 				const g = Math.round(referencedFirstValue.g * 255)
@@ -100,7 +176,6 @@ export function getColorStyle(type, valuesByMode, allVariables = []) {
 			}
 		}
 
-		// Если не нашли цвет, возвращаем паттерн
 		return {
 			background:
 				'linear-gradient(45deg, #f8f9fa 25%, #e9ecef 25%, #e9ecef 50%, #f8f9fa 50%, #f8f9fa 75%, #e9ecef 75%)',
@@ -137,7 +212,21 @@ export function safeJsonParse(data) {
 			return {}
 		}
 	}
-	return data || {}
+
+	if (
+		data &&
+		typeof data === 'object' &&
+		data.values &&
+		typeof data.values === 'object'
+	) {
+		return data.values
+	}
+
+	if (data && typeof data === 'object') {
+		return data
+	}
+
+	return {}
 }
 
 export function getTypeLabel(type) {

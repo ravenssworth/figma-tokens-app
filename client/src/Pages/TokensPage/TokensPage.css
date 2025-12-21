@@ -1,11 +1,37 @@
-.container {
+.tokens-page {
+	display: flex;
+	justify-content: center;
+	width: 100%;
+	height: 45vw;
+	gap: 1.25vw;
+}
+
+.tokens-page__left-column {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	height: 100%;
+	gap: 1.25vw;
+}
+
+.tokens-page__right-column {
+	display: flex;
+	align-items: end;
+	height: 100%;
+}
+
+.tokens-page__create-version-section {
+	width: 100%;
+}
+
+.tokens-page__dashboard {
 	display: flex;
 	background: white;
 	border-radius: 1.25vw;
 	overflow: hidden;
 	box-shadow: 0 0.417vw 2.5vw rgba(0, 0, 0, 0.08);
-	width: 90vmin;
-	height: 90vmin;
+	height: 100%;
+	width: 45vw;
 }
 
 .sidebar {
@@ -20,6 +46,63 @@
 	box-sizing: border-box;
 }
 
+.tokens-page__create-version-btn {
+	background: #007aff;
+	color: white;
+	border: none;
+	padding: 0.8vw 1.6vw;
+	border-radius: 0.833vw;
+	cursor: pointer;
+}
+
+.tokens-page__version-form {
+	display: flex;
+	align-items: center;
+	flex-direction: column;
+	background-color: white;
+	padding: 1.25vw;
+	gap: 1.25vw;
+	border-radius: 0.833vw;
+}
+
+.tokens-page__version-form input {
+	flex: 1;
+	padding: 0.8vw 1.2vw;
+	border: 0.005vw solid #e5e5e7;
+	border-radius: 0.433vw;
+	width: 100%;
+}
+
+.tokens-page__version-form input:focus {
+	outline: none;
+	border-color: #007aff;
+}
+
+.tokens-page__version-form-buttons {
+	display: flex;
+	justify-content: space-between;
+	gap: 1.25vw;
+	width: 100%;
+}
+
+.tokens-page__version-form button {
+	padding: 0.8vw 1.2vw;
+	border: none;
+	cursor: pointer;
+	border-radius: 0.433vw;
+	width: 100%;
+}
+
+.tokens-page__version-form button:first-of-type {
+	background: #007aff;
+	color: white;
+}
+
+.tokens-page__version-form button:last-of-type {
+	background: #f5f5f7;
+	color: #1d1d1f;
+}
+
 .loading,
 .error {
 	padding: 4.167vw;
@@ -30,4 +113,29 @@
 
 .error {
 	color: #ff3b30;
+}
+
+.tokens-page__collection-header {
+	display: flex;
+
+	border-radius: 0.75vw;
+}
+
+.tokens-page__version-selector select {
+	background: white;
+	box-shadow: 0 0.417vw 2.5vw rgba(0, 0, 0, 0.08);
+	border: none;
+	padding: 0.7vw 0.15vw;
+	border-radius: 0.6vw;
+	cursor: pointer;
+}
+
+.tokens-page__version-selector select:focus {
+	outline: none;
+	border: none;
+}
+
+.tokens-page__version-info {
+	display: flex;
+	gap: 1.25vw;
 }
