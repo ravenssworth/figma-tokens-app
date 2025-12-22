@@ -93,16 +93,12 @@ th:last-child {
 	position: relative;
 	display: inline-block;
 	cursor: help;
+	width: 0.8vw;
+	height: 0.8vw;
 }
 
-.variables-panel__version-info-icon {
-	color: #86868b;
-	font-size: 1vw;
-	transition: color 0.2s;
-}
-
-.variables-panel__version-info-icon:hover {
-	color: #007aff;
+.variables-panel__version-info-tooltip svg:hover path {
+	fill: #007aff;
 }
 
 .variables-panel__version-info-popup {

@@ -54,6 +54,7 @@
 	border-radius: 1.25vw;
 	border: 0.05vw solid #e5e5e7;
 	color: #1d1d1f;
+	background-color: white;
 }
 
 .history-panel__date-range-selector button {

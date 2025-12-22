@@ -15,7 +15,9 @@ export function Layout({ children }) {
 						<Link
 							to='/tokens'
 							className={`nav-link ${
-								location.pathname === '/tokens' ? 'active' : ''
+								location.pathname === '/tokens' || location.pathname === '/'
+									? 'active'
+									: ''
 							}`}
 						>
 							<span>Токены</span>

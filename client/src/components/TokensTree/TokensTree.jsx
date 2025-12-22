@@ -103,7 +103,9 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 		return (
 			<div
 				key={groupPath}
-				className='tokens-tree__tokens-tree-item tokens-tree-item'
+				className={`tokens-tree__tokens-tree-item tokens-tree-item ${
+					isSelected ? 'selected' : ''
+				}`}
 			>
 				<div
 					className={`tokens-tree-item__row ${
@@ -154,7 +156,11 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 			{rootGroups.length > 0 ? (
 				<div className='tokens-tree__container'>
 					<div className='tokens-tree__list'>
-						<div className='tokens-tree__tokens-tree-item tokens-tree-item'>
+						<div
+							className={`tokens-tree__tokens-tree-item tokens-tree-item ${
+								selectedGroup === 'all' ? 'selected' : ''
+							}`}
+						>
 							<div
 								className={`tokens-tree-all-item__row ${
 									selectedGroup === 'all' ? 'selected' : ''
