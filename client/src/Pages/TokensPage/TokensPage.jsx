@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { CollectionsPanel } from '../../components/CollectionsPanel/CollectionsPanel'
 import { TokenTree } from '../../components/TokensTree/TokensTree'
 import { TokensTable } from '../../components/TokensTable/TokensTable'
+import { useNavigate } from 'react-router-dom'
 import './TokensPage.css'
 
 export function TokensPage() {
@@ -16,6 +17,44 @@ export function TokensPage() {
 	const [collectionVersions, setCollectionVersions] = useState([])
 	const [isCreatingVersion, setIsCreatingVersion] = useState(false)
 	const [newVersionName, setNewVersionName] = useState('')
+	const [notification, setNotification] = useState(null)
+	const [isAuthenticated, setIsAuthenticated] = useState(false)
+	const navigate = useNavigate()
+
+	useEffect(() => {
+		const checkAuth = async () => {
+			const token = localStorage.getItem('token')
+			if (!token) {
+				setIsAuthenticated(false)
+				return
+			}
+
+			try {
+				const response = await fetch('/api/auth/verify', {
+					headers: { Authorization: `Bearer ${token}` },
+				})
+				const data = await response.json()
+				setIsAuthenticated(data.success === true)
+			} catch (error) {
+				console.error('Ошибка проверки авторизации:', error)
+				setIsAuthenticated(false)
+			}
+		}
+
+		checkAuth()
+		const handleStorageChange = () => {
+			checkAuth()
+		}
+
+		globalThis.addEventListener('storage', handleStorageChange)
+
+		globalThis.addEventListener('focus', checkAuth)
+
+		return () => {
+			globalThis.removeEventListener('storage', handleStorageChange)
+			globalThis.removeEventListener('focus', checkAuth)
+		}
+	}, [])
 
 	useEffect(() => {
 		loadData()
@@ -119,8 +158,23 @@ export function TokensPage() {
 	}
 
 	async function handleCreateVersion() {
+		const token = localStorage.getItem('token')
+		if (!token) {
+			setNotification({
+				type: 'error',
+				message: 'Для создания версии необходимо авторизоваться',
+			})
+			setTimeout(() => {
+				navigate('/auth')
+			}, 1500)
+			return
+		}
+
 		if (!newVersionName.trim()) {
-			alert('Введите название версии')
+			setNotification({
+				type: 'error',
+				message: 'Введите название версии',
+			})
 			return
 		}
 
@@ -129,7 +183,10 @@ export function TokensPage() {
 				`/api/collections/${selectedCollection.id}/versions`,
 				{
 					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
+					headers: {
+						'Content-Type': 'application/json',
+						Authorization: `Bearer ${token}`,
+					},
 					body: JSON.stringify({
 						version_name: newVersionName,
 						description: `Версия ${newVersionName} коллекции ${selectedCollection.name}`,
@@ -144,15 +201,36 @@ export function TokensPage() {
 
 				setSelectedVersion(data.data)
 
+				const versionName = newVersionName
 				setNewVersionName('')
 				setIsCreatingVersion(false)
-				alert(`Версия "${newVersionName}" успешно создана!`)
+				setNotification({
+					type: 'success',
+					message: `Версия "${versionName}" успешно создана!`,
+				})
 			} else {
-				alert('Ошибка создания версии')
+				if (response.status === 401 || response.status === 403) {
+					setIsAuthenticated(false)
+					setNotification({
+						type: 'error',
+						message: 'Сессия истекла. Необходимо авторизоваться',
+					})
+					setTimeout(() => {
+						navigate('/auth')
+					}, 1500)
+				} else {
+					setNotification({
+						type: 'error',
+						message: data.error || 'Ошибка создания версии',
+					})
+				}
 			}
 		} catch (error) {
 			console.error('Ошибка создания версии:', error)
-			alert('Не удалось создать версию')
+			setNotification({
+				type: 'error',
+				message: 'Не удалось создать версию',
+			})
 		}
 	}
 
@@ -175,19 +253,14 @@ export function TokensPage() {
 					return v.name.startsWith(selectedGroup + '/')
 			  })
 
-	if (loading) {
-		return <div className='loading-container'>Загрузка данных...</div>
-	}
-
-	if (error) {
-		return (
-			<div className='error-container'>
-				<h3>Ошибка загрузки</h3>
-				<p>{error}</p>
-				<button onClick={loadData}>Повторить попытку</button>
-			</div>
-		)
-	}
+	useEffect(() => {
+		if (notification) {
+			const timer = setTimeout(() => {
+				setNotification(null)
+			}, 5000)
+			return () => clearTimeout(timer)
+		}
+	}, [notification])
 
 	if (loading) {
 		return <div className='loading-container'>Загрузка данных...</div>
@@ -205,6 +278,19 @@ export function TokensPage() {
 
 	return (
 		<div className='tokens-page'>
+			{notification && (
+				<div
+					className={`tokens-page__notification tokens-page__notification--${notification.type}`}
+				>
+					{notification.message}
+					<button
+						className='tokens-page__notification-close'
+						onClick={() => setNotification(null)}
+					>
+						×
+					</button>
+				</div>
+			)}
 			<div className='tokens-page__left-column'>
 				<div className='tokens-page__collection-header'>
 					{collectionVersions.length > 0 && (
@@ -261,7 +347,7 @@ export function TokensPage() {
 				</div>
 			</div>
 			<div className='tokens-page__right-column'>
-				{!selectedVersion && selectedCollection && (
+				{selectedVersion === null && selectedCollection !== null && (
 					<div className='tokens-page__create-version-section'>
 						{!isCreatingVersion ? (
 							<button

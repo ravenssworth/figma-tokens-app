@@ -237,15 +237,13 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 			) : (
 				<div className='history-panel__list'>
 					{filteredHistory.map((record, index) => {
-						// Находим предыдущее значение для той же переменной
 						const prevRecord = history
 							.slice(index + 1)
 							.find(r => r.variable_id === record.variable_id)
 
 						const isCreated = !prevRecord
-						const changeType = isCreated ? 'created' : 'updated'
+						const changeType = record.change_type
 
-						// Парсим значения для использования в getColorStyle
 						const parseValues = values => {
 							if (!values) return null
 							if (typeof values === 'string') {
@@ -286,7 +284,7 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 									<div
 										className={`history-record__badge history-record__badge--${changeType}`}
 									>
-										{changeTypeLabels[record.change_type] || 'Изменена'}
+										{changeTypeLabels[record.change_type]}
 									</div>
 								</div>
 

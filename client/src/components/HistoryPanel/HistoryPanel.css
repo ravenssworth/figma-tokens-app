@@ -37,7 +37,7 @@
 	color: #86868b;
 	background: #e5e5e7;
 	padding: 0.15vw 0.4vw;
-	border-radius: 1.25vw;
+	border-radius: 0.433vw;
 	font-weight: 500;
 	flex-shrink: 0;
 }
@@ -51,7 +51,7 @@
 .history-panel__date-input-group input {
 	width: 5.5vw;
 	padding: 0.3vw 0.5vw;
-	border-radius: 1.25vw;
+	border-radius: 0.433vw;
 	border: 0.05vw solid #e5e5e7;
 	color: #1d1d1f;
 	background-color: white;
@@ -60,7 +60,7 @@
 .history-panel__date-range-selector button {
 	width: 100%;
 	padding: 0.3vw 0.5vw;
-	border-radius: 1.25vw;
+	border-radius: 0.433vw;
 	border: 0.05vw solid #e5e5e7;
 	color: #1d1d1f;
 	background: white;
@@ -134,6 +134,11 @@
 
 .history-record__badge--updated {
 	background: #9ecdff;
+	color: #ffffff;
+}
+
+.history-record__badge--deleted {
+	background: #ff9e9e;
 	color: #ffffff;
 }
 

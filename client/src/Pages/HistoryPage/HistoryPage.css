@@ -13,7 +13,7 @@
 	padding: 0.8vw 1.2vw;
 	border-bottom: 0.05vw solid #e5e5e7;
 	background: white;
-	border-radius: 1.25vw;
+	border-radius: 0.833vw;
 }
 
 .history-page__header-title {
@@ -50,7 +50,7 @@
 .history-page__collection-selector select {
 	padding: 0.3vw 0.5vw;
 	border: 0.05vw solid #d2d2d7;
-	border-radius: 1.25vw;
+	border-radius: 0.433vw;
 	color: #1d1d1f;
 	background: white;
 	cursor: pointer;
@@ -74,11 +74,11 @@
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 16px;
+	gap: 1.25vw;
 	color: #86868b;
 }
 
 .history-page__loading-container i {
-	font-size: 24px;
+	font-size: 2.5vw;
 	color: #86868b;
 }
