@@ -2,11 +2,16 @@ require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const path = require('path')
+const fs = require('fs/promises')
+const os = require('os')
+const { execFile } = require('child_process')
+const { promisify } = require('util')
 const app = express()
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const JWT_SECRET = process.env.JWT_SECRET
 const PORT = process.env.APP_PORT || 3000
+const execFileAsync = promisify(execFile)
 
 app.use(cors())
 app.use(express.json())
@@ -414,6 +419,122 @@ app.get('/api/versions/:versionId/variables', async (req, res) => {
 	} catch (error) {
 		console.error('Ошибка получения переменных версии:', error)
 		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
+app.post('/api/npm/package', async (req, res) => {
+	const {
+		packageName,
+		packageVersion,
+		entryFileName,
+		entryFileContent,
+		shouldPublish,
+		npmToken,
+	} = req.body || {}
+
+	if (!packageName || !packageVersion || !entryFileName || !entryFileContent) {
+		return res.status(400).json({
+			success: false,
+			error: 'Не хватает данных для сборки npm-пакета',
+		})
+	}
+
+	const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tokens-npm-'))
+	const packageDir = path.join(tempRoot, 'package')
+	const packageJsonPath = path.join(packageDir, 'package.json')
+	const readmePath = path.join(packageDir, 'README.md')
+	const entryPath = path.join(packageDir, entryFileName)
+	const indexJsPath = path.join(packageDir, 'index.js')
+	const npmRcPath = path.join(packageDir, '.npmrc')
+
+	try {
+		await fs.mkdir(packageDir, { recursive: true })
+
+		const packageJson = {
+			name: packageName,
+			version: packageVersion,
+			description: 'Design tokens package generated from Figma Tokens App',
+			main: 'index.js',
+			files: ['index.js', entryFileName, 'README.md'],
+			license: 'MIT',
+			sideEffects: [entryFileName.endsWith('.css') ? entryFileName : '*.css'],
+		}
+
+		const jsExportLine = entryFileName.endsWith('.json')
+			? `module.exports = require('./${entryFileName}')`
+			: `module.exports = '${entryFileName}'`
+		const jsCssImportLine = entryFileName.endsWith('.css')
+			? `require('./${entryFileName}')\n`
+			: ''
+
+		await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf-8')
+		await fs.writeFile(
+			readmePath,
+			`# ${packageName}\n\nАвтогенерируемый пакет дизайн-токенов.\n`,
+			'utf-8',
+		)
+		await fs.writeFile(entryPath, entryFileContent, 'utf-8')
+		await fs.writeFile(indexJsPath, `${jsCssImportLine}${jsExportLine}\n`, 'utf-8')
+
+		const { stdout: packStdout } = await execFileAsync('npm', ['pack'], {
+			cwd: packageDir,
+		})
+		const tgzFileName = packStdout
+			.split('\n')
+			.map(line => line.trim())
+			.filter(Boolean)
+			.pop()
+		const tgzPath = path.join(packageDir, tgzFileName)
+		const tgzBuffer = await fs.readFile(tgzPath)
+
+		if (shouldPublish) {
+			if (!npmToken) {
+				return res.status(400).json({
+					success: false,
+					error: 'Для публикации нужен npm token',
+				})
+			}
+
+			await fs.writeFile(
+				npmRcPath,
+				`//registry.npmjs.org/:_authToken=${npmToken}\n`,
+				'utf-8',
+			)
+
+			await execFileAsync('npm', ['publish', '--access', 'public'], {
+				cwd: packageDir,
+				env: {
+					...process.env,
+					NPM_CONFIG_USERCONFIG: npmRcPath,
+				},
+			})
+
+			return res.json({
+				success: true,
+				message: `Пакет ${packageName}@${packageVersion} опубликован`,
+				published: true,
+			})
+		}
+
+		return res.json({
+			success: true,
+			message: 'Пакет собран',
+			fileName: tgzFileName,
+			fileContentBase64: tgzBuffer.toString('base64'),
+		})
+	} catch (error) {
+		console.error('Ошибка сборки/publish npm-пакета:', error)
+		return res.status(500).json({
+			success: false,
+			error: 'Ошибка сборки/publish npm-пакета',
+			details: error.message,
+		})
+	} finally {
+		try {
+			await fs.rm(tempRoot, { recursive: true, force: true })
+		} catch (cleanupError) {
+			console.error('Ошибка очистки temp папки:', cleanupError.message)
+		}
 	}
 })
 

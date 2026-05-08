@@ -7,19 +7,26 @@ const ExportPage = () => {
 	const [versions, setVersions] = useState([])
 	const [selectedVersion, setSelectedVersion] = useState(null)
 	const [tokens, setTokens] = useState([])
-	const [loading, setLoading] = useState(true)
 	const [loadingTokens, setLoadingTokens] = useState(false)
 
 	const [format, setFormat] = useState('css')
 	const [isExporting, setIsExporting] = useState(false)
+	const [isExportFormOpen, setIsExportFormOpen] = useState(false)
 	const [downloadUrl, setDownloadUrl] = useState(null)
+	const [downloadFileName, setDownloadFileName] = useState('')
+	const [npmPackageName, setNpmPackageName] = useState('@org/design-tokens')
+	const [npmPackageVersion, setNpmPackageVersion] = useState('1.0.0')
+	const [npmToken, setNpmToken] = useState('')
+	const [isPackaging, setIsPackaging] = useState(false)
+	const [isPublishing, setIsPublishing] = useState(false)
+	const [npmStatus, setNpmStatus] = useState('')
 	const [tokenTypes, setTokenTypes] = useState({
-		colors: true,
-		sizes: true,
-		spacing: true,
-		typography: true,
+		color: true,
+		number: true,
+		string: true,
+		boolean: true,
 	})
-	const [fileName, setFileName] = useState('tokens')
+	const [fileName, setFileName] = useState('')
 
 	useEffect(() => {
 		loadCollections()
@@ -56,8 +63,6 @@ const ExportPage = () => {
 			}
 		} catch (error) {
 			console.error('Ошибка загрузки коллекций:', error)
-		} finally {
-			setLoading(false)
 		}
 	}
 
@@ -80,19 +85,122 @@ const ExportPage = () => {
 	async function loadTokensFromVersion(versionId) {
 		try {
 			setLoadingTokens(true)
-			const response = await fetch(`/api/versions/${versionId}/variables`)
-			const data = await response.json()
+			const [versionResponse, allVariablesResponse] = await Promise.all([
+				fetch(`/api/versions/${versionId}/variables`),
+				fetch('/api/variables'),
+			])
+			const [data, allVariablesData] = await Promise.all([
+				versionResponse.json(),
+				allVariablesResponse.json(),
+			])
 
 			if (data.success) {
-				const parsedTokens = data.data.map(token => {
-					const valuesByMode = JSON.parse(token.values_by_mode || '{}')
-					const firstModeValue = valuesByMode[Object.keys(valuesByMode)[0]]
+				const parseValuesByMode = valuesByMode => {
+					if (!valuesByMode) return {}
+					if (typeof valuesByMode === 'string') {
+						return JSON.parse(valuesByMode || '{}')
+					}
+					if (typeof valuesByMode === 'object') {
+						if (
+							valuesByMode.values &&
+							typeof valuesByMode.values === 'object'
+						) {
+							return valuesByMode.values
+						}
+						return valuesByMode
+					}
+					return {}
+				}
+
+				const snapshotVariables = data.data || []
+				const allVariables = allVariablesData?.success
+					? allVariablesData.data || []
+					: []
+				const variablesById = new Map()
+
+				;[...allVariables, ...snapshotVariables].forEach(variable => {
+					variablesById.set(String(variable.id), variable)
+				})
+
+				const getFirstModeValue = (valuesByMode, preferredModeId) => {
+					const modeKeys = Object.keys(valuesByMode || {})
+					if (modeKeys.length === 0) return null
+					if (preferredModeId && valuesByMode[preferredModeId] !== undefined) {
+						return valuesByMode[preferredModeId]
+					}
+					return valuesByMode[modeKeys[0]]
+				}
+
+				const getReferenceNameByAliasValue = aliasValue => {
+					if (
+						!aliasValue ||
+						typeof aliasValue !== 'object' ||
+						aliasValue.type !== 'VARIABLE_ALIAS' ||
+						!aliasValue.id
+					) {
+						return null
+					}
+
+					const referencedToken = variablesById.get(String(aliasValue.id))
+					return referencedToken?.name || null
+				}
+
+				const resolveTokenValue = (
+					value,
+					preferredModeId,
+					visited = new Set(),
+				) => {
+					if (
+						!value ||
+						typeof value !== 'object' ||
+						value.type !== 'VARIABLE_ALIAS' ||
+						!value.id
+					) {
+						return value
+					}
+
+					const aliasId = String(value.id)
+					if (visited.has(aliasId)) {
+						return value
+					}
+					visited.add(aliasId)
+
+					const referencedToken = variablesById.get(aliasId)
+					if (!referencedToken) {
+						return value
+					}
+
+					const referencedValuesByMode = parseValuesByMode(
+						referencedToken.values_by_mode,
+					)
+					const referencedFirstModeValue = getFirstModeValue(
+						referencedValuesByMode,
+						preferredModeId,
+					)
+
+					return resolveTokenValue(
+						referencedFirstModeValue,
+						preferredModeId,
+						visited,
+					)
+				}
+
+				const parsedTokens = snapshotVariables.map(token => {
+					const valuesByMode = parseValuesByMode(token.values_by_mode)
+					const modeKeys = Object.keys(valuesByMode || {})
+					const firstModeKey = modeKeys[0]
+					const firstModeValue = firstModeKey
+						? valuesByMode[firstModeKey]
+						: null
+					const resolvedValue = resolveTokenValue(firstModeValue, firstModeKey)
+					const referenceName = getReferenceNameByAliasValue(firstModeValue)
 
 					return {
 						id: token.id,
 						name: token.name,
 						type: token.type,
-						value: formatTokenValue(firstModeValue),
+						value: formatTokenValue(resolvedValue),
+						referenceName,
 						from_version: token.from_version,
 						version_name: token.version_name,
 					}
@@ -115,10 +223,10 @@ const ExportPage = () => {
 		if (version) {
 			// Сбрасываем фильтры, чтобы показать все токены новой версии
 			setTokenTypes({
-				colors: true,
-				sizes: true,
-				spacing: true,
-				typography: true,
+				color: true,
+				number: true,
+				string: true,
+				boolean: true,
 			})
 		} else {
 			setTokens([])
@@ -148,10 +256,13 @@ const ExportPage = () => {
 
 		// Handle variable aliases
 		if (value.type === 'VARIABLE_ALIAS' && value.id) {
-			return `alias:${value.id}`
+			return String(value.id)
 		}
 
 		// Return as string
+		if (typeof value === 'number') {
+			return `${value}px`
+		}
 		return String(value)
 	}
 
@@ -159,9 +270,10 @@ const ExportPage = () => {
 	const getFilteredTokens = () => {
 		return tokens.filter(token => {
 			const typeMap = {
-				COLOR: tokenTypes.colors,
-				FLOAT: tokenTypes.sizes || tokenTypes.spacing,
-				STRING: tokenTypes.typography,
+				COLOR: tokenTypes.color,
+				FLOAT: tokenTypes.number,
+				STRING: tokenTypes.string,
+				BOOLEAN: tokenTypes.boolean,
 			}
 			return typeMap[token.type] !== false
 		})
@@ -175,21 +287,62 @@ const ExportPage = () => {
 			return '// Нет токенов для отображения'
 		}
 
+		const getExportTokenName = tokenName => {
+			if (!tokenName) return ''
+			const parts = String(tokenName).split('/').filter(Boolean)
+			const lastPart = parts[parts.length - 1] || tokenName
+			return lastPart.toLowerCase()
+		}
+
 		switch (format) {
-			case 'css':
-				return filteredTokens
-					.map(token => `--${token.name}: ${token.value};`)
-					.join('\n')
+			case 'css': {
+				const lines = filteredTokens.map(token => {
+					const exportName = getExportTokenName(token.name)
+					const referenceExportName = token.referenceName
+						? getExportTokenName(token.referenceName)
+						: null
+					const hasSelfReference =
+						referenceExportName && referenceExportName === exportName
+					const exportValue =
+						referenceExportName && !hasSelfReference
+							? `var(--${referenceExportName})`
+							: token.value
+					return `  --${exportName}: ${exportValue};`
+				})
+
+				return `:root {\n${lines.join('\n')}\n}`
+			}
 			case 'json': {
 				const jsonObj = {}
 				filteredTokens.forEach(token => {
-					jsonObj[token.name] = token.value
+					const exportName = getExportTokenName(token.name)
+					const referenceExportName = token.referenceName
+						? getExportTokenName(token.referenceName)
+						: null
+					const hasSelfReference =
+						referenceExportName && referenceExportName === exportName
+					jsonObj[exportName] =
+						referenceExportName && !hasSelfReference
+							? `{${referenceExportName}}`
+							: token.value
 				})
 				return JSON.stringify(jsonObj, null, 2)
 			}
 			case 'scss':
 				return filteredTokens
-					.map(token => `$${token.name}: ${token.value};`)
+					.map(token => {
+						const exportName = getExportTokenName(token.name)
+						const referenceExportName = token.referenceName
+							? getExportTokenName(token.referenceName)
+							: null
+						const hasSelfReference =
+							referenceExportName && referenceExportName === exportName
+						const exportValue =
+							referenceExportName && !hasSelfReference
+								? `$${referenceExportName}`
+								: token.value
+						return `$${exportName}: ${exportValue};`
+					})
 					.join('\n')
 			default:
 				return ''
@@ -213,6 +366,7 @@ const ExportPage = () => {
 	// Simulate export process
 	const handleExport = () => {
 		setIsExporting(true)
+		const exportFileName = fileName.trim() || 'tokens'
 		// Simulate processing time
 		setTimeout(() => {
 			// Create a blob with the preview content
@@ -220,8 +374,93 @@ const ExportPage = () => {
 			const blob = new Blob([content], { type: 'text/plain' })
 			const url = URL.createObjectURL(blob)
 			setDownloadUrl(url)
+			setDownloadFileName(exportFileName)
 			setIsExporting(false)
 		}, 1500)
+	}
+
+	const getPackageEntryFileName = () => {
+		switch (format) {
+			case 'css':
+				return 'tokens.css'
+			case 'scss':
+				return 'tokens.scss'
+			case 'json':
+				return 'tokens.json'
+			default:
+				return 'tokens.txt'
+		}
+	}
+
+	const handleBuildNpmPackage = async shouldPublish => {
+		try {
+			setNpmStatus('')
+			if (!npmPackageName.trim()) {
+				setNpmStatus('Укажите имя npm-пакета')
+				return
+			}
+			if (!npmPackageVersion.trim()) {
+				setNpmStatus('Укажите версию npm-пакета')
+				return
+			}
+			if (shouldPublish && !npmToken.trim()) {
+				setNpmStatus('Для публикации нужен npm token')
+				return
+			}
+
+			if (shouldPublish) {
+				setIsPublishing(true)
+			} else {
+				setIsPackaging(true)
+			}
+
+			const response = await fetch('/api/npm/package', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					packageName: npmPackageName.trim(),
+					packageVersion: npmPackageVersion.trim(),
+					entryFileName: getPackageEntryFileName(),
+					entryFileContent: getPreviewContent(),
+					shouldPublish,
+					npmToken: npmToken.trim(),
+				}),
+			})
+			const data = await response.json()
+
+			if (!data.success) {
+				setNpmStatus(data.error || 'Не удалось собрать npm-пакет')
+				return
+			}
+
+			if (shouldPublish) {
+				setNpmStatus(data.message || 'Пакет опубликован')
+				return
+			}
+
+			const binary = atob(data.fileContentBase64)
+			const bytes = new Uint8Array(binary.length)
+			for (let i = 0; i < binary.length; i++) {
+				bytes[i] = binary.charCodeAt(i)
+			}
+			const blob = new Blob([bytes], { type: 'application/gzip' })
+			const url = URL.createObjectURL(blob)
+			const link = document.createElement('a')
+			link.href = url
+			link.download = data.fileName || `${npmPackageName.trim()}.tgz`
+			document.body.appendChild(link)
+			link.click()
+			link.remove()
+			URL.revokeObjectURL(url)
+
+			setNpmStatus('npm-пакет собран и скачан')
+		} catch (error) {
+			setNpmStatus('Ошибка при сборке npm-пакета')
+			console.error('Ошибка npm package:', error)
+		} finally {
+			setIsPackaging(false)
+			setIsPublishing(false)
+		}
 	}
 
 	return (
@@ -266,44 +505,104 @@ const ExportPage = () => {
 				</div>
 
 				<div className='export-page__panel'>
-					<div className='export-page__format-section'>
-						<div className='export-page__format-title'>
-							Формат экспорта (.{getFileExtension()})
+					<div className='export-page__top-options'>
+						<div className='export-page__format-section'>
+							<div className='export-page__format-title'>
+								Формат экспорта (.{getFileExtension()})
+							</div>
+							<div className='export-page__format-options'>
+								<label className='export-page__format-option'>
+									<input
+										type='radio'
+										value='css'
+										checked={format === 'css'}
+										onChange={e => setFormat(e.target.value)}
+									/>
+									CSS Custom Properties
+								</label>
+								<label className='export-page__format-option'>
+									<input
+										type='radio'
+										value='json'
+										checked={format === 'json'}
+										onChange={e => setFormat(e.target.value)}
+									/>
+									JSON
+								</label>
+								<label className='export-page__format-option'>
+									<input
+										type='radio'
+										value='scss'
+										checked={format === 'scss'}
+										onChange={e => setFormat(e.target.value)}
+									/>
+									SCSS
+								</label>
+							</div>
 						</div>
-						<div className='export-page__format-options'>
-							<label className='export-page__format-option'>
-								<input
-									type='radio'
-									value='css'
-									checked={format === 'css'}
-									onChange={e => setFormat(e.target.value)}
-								/>
-								CSS Custom Properties
-							</label>
-							<label className='export-page__format-option'>
-								<input
-									type='radio'
-									value='json'
-									checked={format === 'json'}
-									onChange={e => setFormat(e.target.value)}
-								/>
-								JSON
-							</label>
-							<label className='export-page__format-option'>
-								<input
-									type='radio'
-									value='scss'
-									checked={format === 'scss'}
-									onChange={e => setFormat(e.target.value)}
-								/>
-								SCSS
-							</label>
+
+						<div className='export-page__token-types-section'>
+							<div className='export-page__section-title'>Тип токенов</div>
+							<div className='export-page__token-types-options'>
+								<label className='export-page__token-types-label'>
+									<input
+										type='checkbox'
+										checked={tokenTypes.color}
+										onChange={e =>
+											setTokenTypes({
+												...tokenTypes,
+												color: e.target.checked,
+											})
+										}
+									/>
+									Color
+								</label>
+								<label className='export-page__token-types-label'>
+									<input
+										type='checkbox'
+										checked={tokenTypes.number}
+										onChange={e =>
+											setTokenTypes({
+												...tokenTypes,
+												number: e.target.checked,
+											})
+										}
+									/>
+									Number
+								</label>
+								<label className='export-page__token-types-label'>
+									<input
+										type='checkbox'
+										checked={tokenTypes.string}
+										onChange={e =>
+											setTokenTypes({
+												...tokenTypes,
+												string: e.target.checked,
+											})
+										}
+									/>
+									String
+								</label>
+								<label className='export-page__token-types-label'>
+									<input
+										type='checkbox'
+										checked={tokenTypes.boolean}
+										onChange={e =>
+											setTokenTypes({
+												...tokenTypes,
+												boolean: e.target.checked,
+											})
+										}
+									/>
+									Boolean
+								</label>
+							</div>
 						</div>
 					</div>
 
 					<div className='export-page__preview-section'>
 						<div className='export-page__preview-title'>
-							Preview ({tokens.length} токенов)
+							Предпросмотр ({tokens.length} токенов)
 							{loadingTokens && (
 								<span style={{ marginLeft: '10px', fontSize: '12px' }}>
 									Загрузка...
@@ -314,107 +613,96 @@ const ExportPage = () => {
 							<pre>{getPreviewContent()}</pre>
 						</div>
 					</div>
-
-					<div className='export-page__additional-options'>
-						<div className='export-page__collections-section'>
-							<div className='export-page__section-title'>
-								Collections / Versions
-							</div>
-							<div className='export-page__collections-selector'>
-								<select
-									multiple
-									value={selectedCollection ? [selectedCollection.id] : []}
-									onChange={e => {
-										const collectionId = Array.from(
-											e.target.selectedOptions,
-										).map(opt => opt.value)[0]
-										const collection = collections.find(
-											c => c.id === collectionId,
-										)
-										setSelectedCollection(collection || null)
-									}}
-								>
-									{collections.map(collection => (
-										<option key={collection.id} value={collection.id}>
-											{collection.name}
-										</option>
-									))}
-								</select>
-							</div>
-						</div>
-
-						<div className='export-page__token-types-section'>
-							<div className='export-page__section-title'>Token Types</div>
-							<label className='export-page__token-types-label'>
-								<input
-									type='checkbox'
-									checked={tokenTypes.colors}
-									onChange={e =>
-										setTokenTypes({ ...tokenTypes, colors: e.target.checked })
-									}
-								/>
-								Colors
-							</label>
-							<label className='export-page__token-types-label'>
-								<input
-									type='checkbox'
-									checked={tokenTypes.sizes}
-									onChange={e =>
-										setTokenTypes({ ...tokenTypes, sizes: e.target.checked })
-									}
-								/>
-								Sizes
-							</label>
-							<label className='export-page__token-types-label'>
-								<input
-									type='checkbox'
-									checked={tokenTypes.spacing}
-									onChange={e =>
-										setTokenTypes({ ...tokenTypes, spacing: e.target.checked })
-									}
-								/>
-								Spacing
-							</label>
-							<label className='export-page__token-types-label'>
-								<input
-									type='checkbox'
-									checked={tokenTypes.typography}
-									onChange={e =>
-										setTokenTypes({
-											...tokenTypes,
-											typography: e.target.checked,
-										})
-									}
-								/>
-								Typography
-							</label>
-						</div>
-
-						<div className='export-page__filename-section'>
-							<div className='export-page__section-title'>File Name</div>
-							<input
-								type='text'
-								value={fileName}
-								onChange={e => setFileName(e.target.value)}
-								placeholder='tokens'
-								className='export-page__filename-input'
-							/>
-							<span className='export-page__file-extension'>
-								.{getFileExtension()}
-							</span>
-						</div>
-					</div>
 				</div>
 			</div>
 			<div className='export-page__right-column'>
 				<div className='export-page__export-controls'>
-					<button
-						onClick={handleExport}
-						disabled={isExporting || tokens.length === 0}
-						className={`export-page__export-button ${isExporting ? 'export-page__export-button--disabled' : ''}`}
-					>
-						{isExporting ? 'Экспорт...' : 'Экспортировать дизайн-токены'}
-					</button>
+					<div className='export-page__npm-card'>
+						<div className='export-page__section-title'>NPM Package</div>
+						<input
+							type='text'
+							value={npmPackageName}
+							onChange={e => setNpmPackageName(e.target.value)}
+							placeholder='@scope/design-tokens'
+							className='export-page__filename-input'
+						/>
+						<input
+							type='text'
+							value={npmPackageVersion}
+							onChange={e => setNpmPackageVersion(e.target.value)}
+							placeholder='1.0.0'
+							className='export-page__filename-input'
+						/>
+						<input
+							type='password'
+							value={npmToken}
+							onChange={e => setNpmToken(e.target.value)}
+							placeholder='npm token (для публикации)'
+							className='export-page__filename-input'
+						/>
+						<div className='export-page__version-form-buttons'>
+							<button
+								type='button'
+								className='export-page__export-button'
+								disabled={isPackaging || tokens.length === 0}
+								onClick={() => handleBuildNpmPackage(false)}
+							>
+								{isPackaging ? 'Сборка...' : 'Скачать .tgz'}
+							</button>
+							<button
+								type='button'
+								className='export-page__reset-button'
+								disabled={isPublishing || tokens.length === 0}
+								onClick={() => handleBuildNpmPackage(true)}
+							>
+								{isPublishing ? 'Публикация...' : 'Опубликовать'}
+							</button>
+						</div>
+						{npmStatus && (
+							<div className='export-page__npm-status'>{npmStatus}</div>
+						)}
+					</div>
+
+					{!isExportFormOpen ? (
+						<button
+							onClick={() => setIsExportFormOpen(true)}
+							disabled={tokens.length === 0}
+							className='export-page__export-open-button'
+						>
+							Экспортировать
+						</button>
+					) : (
+						<div className='export-page__export-form'>
+							<input
+								type='text'
+								value={fileName}
+								onChange={e => setFileName(e.target.value)}
+								placeholder='Название файла'
+								className='export-page__filename-input'
+							/>
+							<div className='export-page__version-form-buttons'>
+								<button
+									onClick={handleExport}
+									disabled={isExporting || tokens.length === 0}
+									className={`export-page__export-button ${isExporting ? 'export-page__export-button--disabled' : ''}`}
+								>
+									{isExporting
+										? 'Экспорт...'
+										: `Экспортировать .${getFileExtension()}`}
+								</button>
+								<button
+									type='button'
+									className='export-page__reset-button'
+									onClick={() => {
+										setIsExportFormOpen(false)
+										setFileName('')
+									}}
+								>
+									Отмена
+								</button>
+							</div>
+						</div>
+					)}
 
 					{isExporting && (
 						<div className='export-page__progress-container'>
@@ -425,10 +713,10 @@ const ExportPage = () => {
 					{downloadUrl && (
 						<a
 							href={downloadUrl}
-							download={`${fileName}.${getFileExtension()}`}
+							download={`${downloadFileName || 'tokens'}.${getFileExtension()}`}
 							className='export-page__download-link'
 						>
-							Скачать файл ({fileName}.{getFileExtension()})
+							Скачать файл ({downloadFileName || 'tokens'}.{getFileExtension()})
 						</a>
 					)}
 				</div>

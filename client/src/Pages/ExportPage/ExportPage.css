@@ -1,12 +1,14 @@
 .export-page {
 	display: flex;
+	justify-content: center;
+	width: 100%;
 	gap: 1.25vw;
+	height: 45vw;
 }
 
 .export-page__left-column {
 	display: flex;
 	flex-direction: column;
-	height: 100%;
 	gap: 1.25vw;
 	width: 45vw;
 	height: 45vw;
@@ -83,7 +85,6 @@
 .export-page__panel {
 	display: flex;
 	flex-direction: column;
-	justify-content: space-between;
 	gap: 1.25vw;
 	background: white;
 	border-radius: 0.833vw;
@@ -101,7 +102,7 @@
 
 .export-page__format-title {
 	font-weight: 500;
-	font-size: 1.1vw;
+
 	color: #1d1d1f;
 }
 
@@ -111,12 +112,19 @@
 	flex-wrap: wrap;
 }
 
+.export-page__top-options {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1.25vw;
+}
+
 .export-page__format-option {
 	display: flex;
 	align-items: center;
 	gap: 0.5vw;
 	cursor: pointer;
-	font-size: 1vw;
+
 	color: #86868b;
 }
 
@@ -124,49 +132,108 @@
 	width: 1vw;
 	height: 1vw;
 	cursor: pointer;
+	accent-color: #007aff;
 }
 
 .export-page__preview-section {
 	display: flex;
 	flex-direction: column;
 	gap: 0.8vw;
+	height: 100%;
 	border-radius: 0.833vw;
 }
 
 .export-page__preview-title {
 	font-weight: 500;
-	font-size: 1.1vw;
+
 	color: #1d1d1f;
 }
 
 .export-page__preview-content {
-	flex: 1;
-	min-height: 10vw;
 	background: #f7f7f7;
 	border: 0.05vw solid #e5e5e7;
 	border-radius: 0.433vw;
 	padding: 0.8vw;
 	font-family: 'Courier New', Courier, monospace;
-	font-size: 0.9vw;
-	overflow-x: auto;
+	height: 100%;
+	overflow: auto;
 	color: #1d1d1f;
+}
+
+.export-page__preview-content pre {
+	margin: 0;
+	white-space: pre;
 }
 
 .export-page__export-controls {
 	display: flex;
 	flex-direction: column;
 	gap: 0.8vw;
-	padding: 0.8vw 1.2vw;
 	border-radius: 0.833vw;
+	justify-content: space-between;
+	height: 100%;
+}
+
+.export-page__export-open-button {
+	background: #007aff;
+	color: white;
+	border: none;
+	padding: 0.8vw 1.2vw;
+	cursor: pointer;
+	border-radius: 0.433vw;
+	width: 100%;
+}
+
+.export-page__export-open-button:disabled {
+	background: #e5e5e7;
+	color: #86868b;
+	cursor: not-allowed;
+}
+
+.export-page__export-form {
+	display: flex;
+	align-items: center;
+	flex-direction: column;
+	background-color: white;
+	padding: 1.25vw;
+	gap: 1.25vw;
+	border-radius: 0.833vw;
+}
+
+.export-page__npm-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0.7vw;
+	background: white;
+	padding: 1vw;
+	border-radius: 0.833vw;
+}
+
+.export-page__npm-status {
+	font-size: 0.85vw;
+	color: #1d1d1f;
+}
+
+.export-page__version-form-buttons {
+	display: flex;
+	justify-content: space-between;
+	gap: 1.25vw;
+	width: 100%;
+}
+
+.export-page__version-form-buttons button {
+	padding: 0.8vw 1.2vw;
+	border: none;
+	cursor: pointer;
+	border-radius: 0.433vw;
+	width: 100%;
 }
 
 .export-page__export-button {
 	background: #007aff;
 	color: white;
-	border: none;
-	padding: 0.8vw 1.6vw;
-	border-radius: 0.833vw;
-	cursor: pointer;
+	padding: 0.8vw 1.2vw;
+	border-radius: 0.433vw;
 }
 
 .export-page__export-button:hover:not(:disabled) {
@@ -177,6 +244,11 @@
 	background: #e5e5e7;
 	color: #86868b;
 	cursor: not-allowed;
+}
+
+.export-page__reset-button {
+	background: #f5f5f7;
+	color: #1d1d1f;
 }
 
 .export-page__progress-container {
@@ -199,7 +271,7 @@
 	justify-content: center;
 	align-items: center;
 	padding: 0.8vw 1.5vw;
-	background: #28a745;
+	background: #007aff;
 	color: white;
 	text-decoration: none;
 	border-radius: 0.833vw;
@@ -207,28 +279,24 @@
 }
 
 .export-page__download-link:hover {
-	background: #218838;
+	background: #007aff;
 	color: white;
 }
 
-.export-page__additional-options {
-	display: flex;
-	gap: 1.25vw;
-	border-radius: 0.833vw;
-}
-
-.export-page__collections-section,
-.export-page__token-types-section,
-.export-page__filename-section {
+.export-page__token-types-section {
 	display: flex;
 	flex-direction: column;
 	gap: 0.5vw;
-	flex: 1;
+	padding: 0.7vw 0.9vw;
+	border: 0.05vw solid #e5e5e7;
+	border-radius: 0.433vw;
+	background: #fafafa;
+	min-width: 14vw;
 }
 
 .export-page__section-title {
 	font-weight: 500;
-	font-size: 1.1vw;
+
 	color: #1d1d1f;
 }
 
@@ -241,7 +309,6 @@
 .export-page__collections-selector label {
 	color: #86868b;
 	font-weight: 500;
-	font-size: 0.9vw;
 }
 
 .export-page__collections-selector select {
@@ -252,7 +319,6 @@
 	background: white;
 	cursor: pointer;
 	transition: border-color 0.2s;
-	font-size: 0.9vw;
 }
 
 .export-page__collections-selector select:hover {
@@ -270,32 +336,34 @@
 	align-items: center;
 	gap: 0.5vw;
 	cursor: pointer;
-	font-size: 0.9vw;
+
 	color: #86868b;
+}
+
+.export-page__token-types-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.6vw 1vw;
 }
 
 .export-page__token-types-label input[type='checkbox'] {
 	width: 1vw;
 	height: 1vw;
 	cursor: pointer;
+	accent-color: #007aff;
 }
 
 .export-page__filename-input {
-	padding: 0.3vw 0.5vw;
-	border: 0.05vw solid #d2d2d7;
+	flex: 1;
+	padding: 0.8vw 1.2vw;
+	border: 0.005vw solid #e5e5e7;
 	border-radius: 0.433vw;
-	color: #1d1d1f;
+	width: 100%;
 	background: white;
-	font-size: 0.9vw;
-	transition: border-color 0.2s;
-}
-
-.export-page__filename-input:hover {
-	border-color: #86868b;
+	color: #5e5e5e;
 }
 
 .export-page__filename-input:focus {
 	outline: none;
 	border-color: #007aff;
-	box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
 }
