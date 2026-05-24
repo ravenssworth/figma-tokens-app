@@ -5,6 +5,7 @@ import {
 	safeJsonParse,
 	getTypeLabel,
 } from '../../utils/tokenUtils'
+import { formatVersionTagForDisplay } from '../../utils/versionUtils'
 
 import './TokensTable.css'
 
@@ -277,7 +278,8 @@ export function TokensTable({
 									)}
 									{version.version_tag && (
 										<p className='variables-panel__version-info-row'>
-											<strong>Тег:</strong> {version.version_tag}
+											<strong>Тег:</strong>{' '}
+											{formatVersionTagForDisplay(version.version_tag)}
 										</p>
 									)}
 								</div>

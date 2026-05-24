@@ -1,4 +1,9 @@
 import React, { useState, useEffect } from 'react'
+import {
+	formatVersionTagForDisplay,
+	isReleaseVersionTag,
+	sortVersionsForExportList,
+} from '../../utils/versionUtils'
 import './ExportPage.css'
 
 const ExportPage = () => {
@@ -11,9 +16,6 @@ const ExportPage = () => {
 
 	const [format, setFormat] = useState('css')
 	const [isExporting, setIsExporting] = useState(false)
-	const [isExportFormOpen, setIsExportFormOpen] = useState(false)
-	const [downloadUrl, setDownloadUrl] = useState(null)
-	const [downloadFileName, setDownloadFileName] = useState('')
 	const [npmPackageName, setNpmPackageName] = useState('@org/design-tokens')
 	const [npmPackageVersion, setNpmPackageVersion] = useState('1.0.0')
 	const [npmToken, setNpmToken] = useState('')
@@ -47,6 +49,8 @@ const ExportPage = () => {
 	useEffect(() => {
 		if (selectedVersion) {
 			loadTokensFromVersion(selectedVersion.id)
+		} else {
+			setTokens([])
 		}
 	}, [selectedVersion])
 
@@ -72,9 +76,14 @@ const ExportPage = () => {
 			const data = await response.json()
 
 			if (data.success) {
-				setVersions(data.data || [])
-				// Reset selected version when collection changes
-				setSelectedVersion(null)
+				const sorted = sortVersionsForExportList(data.data || [])
+				setVersions(sorted)
+				if (sorted.length > 0) {
+					setSelectedVersion(sorted[0])
+				} else {
+					setSelectedVersion(null)
+					setTokens([])
+				}
 			}
 		} catch (error) {
 			console.error('Ошибка загрузки версий:', error)
@@ -363,20 +372,33 @@ const ExportPage = () => {
 		}
 	}
 
-	// Simulate export process
 	const handleExport = () => {
+		if (tokens.length === 0) return
 		setIsExporting(true)
-		const exportFileName = fileName.trim() || 'tokens'
-		// Simulate processing time
-		setTimeout(() => {
-			// Create a blob with the preview content
-			const content = getPreviewContent()
-			const blob = new Blob([content], { type: 'text/plain' })
-			const url = URL.createObjectURL(blob)
-			setDownloadUrl(url)
-			setDownloadFileName(exportFileName)
-			setIsExporting(false)
-		}, 1500)
+		const raw = (fileName.trim() || 'tokens').replace(/\.[^/.]+$/, '')
+		const exportBase = raw || 'tokens'
+		const ext = getFileExtension()
+		const mime =
+			ext === 'json' ? 'application/json' : 'text/plain;charset=utf-8'
+
+		window.setTimeout(() => {
+			try {
+				const content = getPreviewContent()
+				const blob = new Blob([content], { type: mime })
+				const url = URL.createObjectURL(blob)
+				const a = document.createElement('a')
+				a.href = url
+				a.download = `${exportBase}.${ext}`
+				document.body.appendChild(a)
+				a.click()
+				a.remove()
+				URL.revokeObjectURL(url)
+			} catch (e) {
+				console.error('Ошибка экспорта файла:', e)
+			} finally {
+				setIsExporting(false)
+			}
+		}, 400)
 	}
 
 	const getPackageEntryFileName = () => {
@@ -463,10 +485,16 @@ const ExportPage = () => {
 		}
 	}
 
+	const versionSummary = selectedVersion
+		? `${selectedVersion.version_name} (${formatVersionTagForDisplay(selectedVersion.version_tag)})`
+		: 'не выбрана'
+
 	return (
 		<div className='export-page'>
-			<div className='export-page__left-column'>
-				<div className='export-page__header'>
+			<div className='export-page__workspace'>
+				<div className='export-page__workspace-spacer' aria-hidden='true' />
+				<div className='export-page__main'>
+						<div className='export-page__header'>
 					<div className='export-page__header-title'>
 						<h2>Экспорт дизайн токенов</h2>
 					</div>
@@ -497,12 +525,21 @@ const ExportPage = () => {
 							<option value=''>Выберите версию</option>
 							{versions.map(version => (
 								<option key={version.id} value={String(version.id)}>
-									{version.version_name} ({version.version_tag})
+									{`${version.version_name} (${formatVersionTagForDisplay(version.version_tag)})`}
 								</option>
 							))}
 						</select>
 					</div>
 				</div>
+
+				{selectedVersion &&
+					!isReleaseVersionTag(selectedVersion.version_tag) && (
+						<div className='export-page__version-notice' role='status'>
+							<strong>Черновая версия.</strong> Для стабильной выдачи в прод
+							или в команду обычно выбирают снимок с тегом «релиз». Черновик
+							можно экспортировать для локальной проверки файлов.
+						</div>
+					)}
 
 				<div className='export-page__panel'>
 					<div className='export-page__top-options'>
@@ -604,121 +641,138 @@ const ExportPage = () => {
 						<div className='export-page__preview-title'>
 							Предпросмотр ({tokens.length} токенов)
 							{loadingTokens && (
-								<span style={{ marginLeft: '10px', fontSize: '12px' }}>
-									Загрузка...
-								</span>
+								<span className='export-page__preview-loading'>Загрузка...</span>
 							)}
 						</div>
 						<div className='export-page__preview-content'>
 							<pre>{getPreviewContent()}</pre>
 						</div>
 					</div>
-				</div>
-			</div>
-			<div className='export-page__right-column'>
-				<div className='export-page__export-controls'>
-					<div className='export-page__npm-card'>
-						<div className='export-page__section-title'>NPM Package</div>
-						<input
-							type='text'
-							value={npmPackageName}
-							onChange={e => setNpmPackageName(e.target.value)}
-							placeholder='@scope/design-tokens'
-							className='export-page__filename-input'
-						/>
-						<input
-							type='text'
-							value={npmPackageVersion}
-							onChange={e => setNpmPackageVersion(e.target.value)}
-							placeholder='1.0.0'
-							className='export-page__filename-input'
-						/>
-						<input
-							type='password'
-							value={npmToken}
-							onChange={e => setNpmToken(e.target.value)}
-							placeholder='npm token (для публикации)'
-							className='export-page__filename-input'
-						/>
-						<div className='export-page__version-form-buttons'>
-							<button
-								type='button'
-								className='export-page__export-button'
-								disabled={isPackaging || tokens.length === 0}
-								onClick={() => handleBuildNpmPackage(false)}
-							>
-								{isPackaging ? 'Сборка...' : 'Скачать .tgz'}
-							</button>
-							<button
-								type='button'
-								className='export-page__reset-button'
-								disabled={isPublishing || tokens.length === 0}
-								onClick={() => handleBuildNpmPackage(true)}
-							>
-								{isPublishing ? 'Публикация...' : 'Опубликовать'}
-							</button>
-						</div>
-						{npmStatus && (
-							<div className='export-page__npm-status'>{npmStatus}</div>
-						)}
 					</div>
+				</div>
 
-					{!isExportFormOpen ? (
-						<button
-							onClick={() => setIsExportFormOpen(true)}
-							disabled={tokens.length === 0}
-							className='export-page__export-open-button'
-						>
-							Экспортировать
-						</button>
-					) : (
-						<div className='export-page__export-form'>
-							<input
-								type='text'
-								value={fileName}
-								onChange={e => setFileName(e.target.value)}
-								placeholder='Название файла'
-								className='export-page__filename-input'
-							/>
-							<div className='export-page__version-form-buttons'>
-								<button
-									onClick={handleExport}
-									disabled={isExporting || tokens.length === 0}
-									className={`export-page__export-button ${isExporting ? 'export-page__export-button--disabled' : ''}`}
+				<div className='export-page__workspace-tail'>
+					<div className='export-page__right-slot'>
+						<div className='export-page__side-stack'>
+							<div className='export-page__side-card'>
+								<div className='export-page__side-card-head'>
+									<div className='export-page__side-card-title'>
+										npm-пакет
+									</div>
+									<p className='export-page__side-card-lead'>
+										Содержимое пакета совпадает с предпросмотром слева: те же
+										токены, формат и фильтры типов.
+									</p>
+									<dl className='export-page__side-meta'>
+										<div className='export-page__side-meta-row'>
+											<dt>Коллекция</dt>
+											<dd>{selectedCollection?.name ?? '—'}</dd>
+										</div>
+										<div className='export-page__side-meta-row'>
+											<dt>Версия</dt>
+											<dd>{versionSummary}</dd>
+										</div>
+									</dl>
+								</div>
+								<label className='export-page__field-label' htmlFor='npm-pkg-name'>
+									Имя пакета
+								</label>
+								<input
+									id='npm-pkg-name'
+									type='text'
+									value={npmPackageName}
+									onChange={e => setNpmPackageName(e.target.value)}
+									placeholder='@scope/design-tokens'
+									className='export-page__filename-input'
+								/>
+								<label
+									className='export-page__field-label'
+									htmlFor='npm-pkg-version'
 								>
-									{isExporting
-										? 'Экспорт...'
-										: `Экспортировать .${getFileExtension()}`}
-								</button>
+									Версия пакета
+								</label>
+								<input
+									id='npm-pkg-version'
+									type='text'
+									value={npmPackageVersion}
+									onChange={e => setNpmPackageVersion(e.target.value)}
+									placeholder='1.0.0'
+									className='export-page__filename-input'
+								/>
+								<label className='export-page__field-label' htmlFor='npm-token'>
+									npm token (только для публикации)
+								</label>
+								<input
+									id='npm-token'
+									type='password'
+									value={npmToken}
+									onChange={e => setNpmToken(e.target.value)}
+									placeholder='npm token'
+									className='export-page__filename-input'
+									autoComplete='off'
+								/>
+								<div className='export-page__version-form-buttons'>
+									<button
+										type='button'
+										className='export-page__export-button'
+										disabled={isPackaging || tokens.length === 0}
+										onClick={() => handleBuildNpmPackage(false)}
+									>
+										{isPackaging ? 'Сборка...' : 'Скачать .tgz'}
+									</button>
+									<button
+										type='button'
+										className='export-page__reset-button'
+										disabled={isPublishing || tokens.length === 0}
+										onClick={() => handleBuildNpmPackage(true)}
+									>
+										{isPublishing ? 'Публикация...' : 'Опубликовать'}
+									</button>
+								</div>
+								{npmStatus && (
+									<div className='export-page__npm-status'>{npmStatus}</div>
+								)}
+							</div>
+
+							<div className='export-page__side-card export-page__side-card--actions'>
+								<div className='export-page__side-card-title'>Файл</div>
+								<p className='export-page__side-card-lead export-page__side-card-lead--tight'>
+									Имя без расширения — одно нажатие, файл сразу сохранится в
+									загрузки.
+								</p>
+								<label
+									className='export-page__field-label'
+									htmlFor='export-file-name'
+								>
+									Имя файла (без .{getFileExtension()})
+								</label>
+								<input
+									id='export-file-name'
+									type='text'
+									value={fileName}
+									onChange={e => setFileName(e.target.value)}
+									placeholder='tokens'
+									className='export-page__filename-input'
+									disabled={tokens.length === 0}
+								/>
 								<button
 									type='button'
-									className='export-page__reset-button'
-									onClick={() => {
-										setIsExportFormOpen(false)
-										setFileName('')
-									}}
+									onClick={handleExport}
+									disabled={isExporting || tokens.length === 0}
+									className='export-page__export-open-button'
 								>
-									Отмена
+									{isExporting
+										? 'Сохранение...'
+										: `Скачать .${getFileExtension()}`}
 								</button>
+								{isExporting && (
+									<div className='export-page__progress-container'>
+										<div className='export-page__progress-bar' />
+									</div>
+								)}
 							</div>
 						</div>
-					)}
-
-					{isExporting && (
-						<div className='export-page__progress-container'>
-							<div className='export-page__progress-bar' />
-						</div>
-					)}
-
-					{downloadUrl && (
-						<a
-							href={downloadUrl}
-							download={`${downloadFileName || 'tokens'}.${getFileExtension()}`}
-							className='export-page__download-link'
-						>
-							Скачать файл ({downloadFileName || 'tokens'}.{getFileExtension()})
-						</a>
-					)}
+					</div>
 				</div>
 			</div>
 		</div>

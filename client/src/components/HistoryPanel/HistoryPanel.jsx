@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
 	getColorStyle,
 	getTypeLabel,
@@ -6,12 +6,26 @@ import {
 } from '../../utils/tokenUtils'
 import './HistoryPanel.css'
 
+function parseHistoryValues(values) {
+	if (!values) return null
+	if (typeof values === 'string') {
+		try {
+			return JSON.parse(values)
+		} catch {
+			return null
+		}
+	}
+	return values
+}
+
 export function HistoryPanel({ collection, variables: propsVariables }) {
 	const [history, setHistory] = useState([])
 	const [loading, setLoading] = useState(true)
 	const [selectedVariable, setSelectedVariable] = useState(null)
 	const [startDate, setStartDate] = useState('')
 	const [endDate, setEndDate] = useState('')
+	const [isDateFilterActive, setIsDateFilterActive] = useState(false)
+	const [nameSearch, setNameSearch] = useState('')
 	const [allVariables, setAllVariables] = useState([])
 	const [currentCollectionVariables, setCurrentCollectionVariables] = useState(
 		[]
@@ -25,10 +39,6 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		setEndDate(end.toISOString().split('T')[0])
 		setStartDate(start.toISOString().split('T')[0])
 	}
-
-	useEffect(() => {
-		resetPeriod()
-	}, [])
 
 	useEffect(() => {
 		const loadAllVariables = async () => {
@@ -152,6 +162,19 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		loadHistory()
 	}, [collection, currentCollectionVariables])
 
+	const variableChains = useMemo(() => {
+		const map = new Map()
+		for (const rec of history) {
+			const id = rec.variable_id
+			if (!map.has(id)) map.set(id, [])
+			map.get(id).push(rec)
+		}
+		for (const list of map.values()) {
+			list.sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at))
+		}
+		return map
+	}, [history])
+
 	if (!collection) {
 		return (
 			<div className='history-empty'>
@@ -161,20 +184,27 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 	}
 
 	const filteredHistory = history.filter(record => {
-		if (!startDate && !endDate) return true
+		if (isDateFilterActive) {
+			const recordDate = new Date(record.changed_at)
+			const start = startDate ? new Date(startDate) : null
+			const end = endDate ? new Date(endDate) : null
 
-		const recordDate = new Date(record.changed_at)
-		const start = startDate ? new Date(startDate) : null
-		const end = endDate ? new Date(endDate) : null
+			if (start) start.setHours(0, 0, 0, 0)
+			if (end) end.setHours(23, 59, 59, 999)
 
-		if (start) start.setHours(0, 0, 0, 0)
-		if (end) end.setHours(23, 59, 59, 999)
+			let isWithinRange = true
+			if (start) isWithinRange = isWithinRange && recordDate >= start
+			if (end) isWithinRange = isWithinRange && recordDate <= end
+			if (!isWithinRange) return false
+		}
 
-		let isWithinRange = true
-		if (start) isWithinRange = isWithinRange && recordDate >= start
-		if (end) isWithinRange = isWithinRange && recordDate <= end
+		const q = nameSearch.trim().toLowerCase()
+		if (q) {
+			const name = (record.variable?.name || '').toLowerCase()
+			if (!name.includes(q)) return false
+		}
 
-		return isWithinRange
+		return true
 	})
 
 	const uniqueVariableIds = new Set(filteredHistory.map(h => h.variable_id))
@@ -191,37 +221,84 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		restored: 'Восстановлена',
 	}
 
+	const emptyMessage =
+		history.length === 0
+			? 'Нет изменений в этой коллекции'
+			: 'Нет записей по заданным условиям (период или поиск)'
+
 	return (
 		<div className='history-panel'>
 			<div className='history-panel__header'>
-				<div className='history-panel__header-title'>
-					<h3>История изменений коллекции "{collection.name}"</h3>
-					<span className='stat-value'>{stats.totalChanges}</span>
+				<div className='history-panel__header-main'>
+					<div className='history-panel__header-title'>
+						<h3>История изменений коллекции "{collection.name}"</h3>
+						<span className='stat-value'>{stats.totalChanges}</span>
+					</div>
+					<p className='history-panel__header-meta'>
+						Последнее изменение: {stats.lastChange}
+					</p>
 				</div>
 
-				<div className='history-panel__controls'>
-					<div className='history-panel__date-range-selector'>
+				<div className='history-panel__toolbar'>
+					<div className='history-panel__toolbar-search'>
+						<label className='history-panel__toolbar-label' htmlFor='history-token-search'>
+							Поиск
+						</label>
+						<input
+							id='history-token-search'
+							type='search'
+							className='history-panel__search-input'
+							placeholder='Имя или часть пути токена'
+							value={nameSearch}
+							onChange={e => setNameSearch(e.target.value)}
+							autoComplete='off'
+						/>
+					</div>
+
+					<div className='history-panel__toolbar-period'>
+						<label className='history-panel__date-filter-toggle'>
+							<input
+								type='checkbox'
+								checked={isDateFilterActive}
+								onChange={e => {
+									const on = e.target.checked
+									setIsDateFilterActive(on)
+									if (on) resetPeriod()
+								}}
+							/>
+							<span
+								className='history-panel__checkbox-ui'
+								aria-hidden='true'
+							/>
+							<span className='history-panel__date-filter-toggle-text'>
+								Фильтр по периоду
+							</span>
+						</label>
 						<div className='history-panel__date-input-group'>
 							<input
 								type='date'
 								value={startDate}
 								onChange={e => setStartDate(e.target.value)}
-								className='history-panel__date-input'
+								disabled={!isDateFilterActive}
+								className={`history-panel__date-input${!isDateFilterActive ? ' history-panel__date-input--inactive' : ''}`}
 							/>
 							<span className='history-panel__date-separator'>—</span>
 							<input
 								type='date'
 								value={endDate}
 								onChange={e => setEndDate(e.target.value)}
-								className='history-panel__date-input'
+								disabled={!isDateFilterActive}
+								className={`history-panel__date-input${!isDateFilterActive ? ' history-panel__date-input--inactive' : ''}`}
 							/>
+							<button
+								type='button'
+								className='history-panel__reset-button'
+								disabled={!isDateFilterActive}
+								onClick={resetPeriod}
+							>
+								Сбросить период
+							</button>
 						</div>
-						<button
-							className='history-panel__reset-button'
-							onClick={resetPeriod}
-						>
-							Сбросить
-						</button>
 					</div>
 				</div>
 			</div>
@@ -232,34 +309,28 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 				</div>
 			) : filteredHistory.length === 0 ? (
 				<div className='history-panel__empty'>
-					<p>Нет изменений за выбранный период</p>
+					<p>{emptyMessage}</p>
 				</div>
 			) : (
 				<div className='history-panel__list'>
-					{filteredHistory.map((record, index) => {
-						const prevRecord = history
-							.slice(index + 1)
-							.find(r => r.variable_id === record.variable_id)
+					{filteredHistory.map(record => {
+						const fullIdx = history.findIndex(h => h.id === record.id)
+						const prevRecord =
+							fullIdx >= 0
+								? history
+										.slice(fullIdx + 1)
+										.find(r => r.variable_id === record.variable_id)
+								: null
 
 						const isCreated = !prevRecord
 						const changeType = record.change_type
 
-						const parseValues = values => {
-							if (!values) return null
-							if (typeof values === 'string') {
-								try {
-									return JSON.parse(values)
-								} catch {
-									return null
-								}
-							}
-							return values
-						}
-
-						const currentValues = parseValues(record.values_by_mode)
+						const currentValues = parseHistoryValues(record.values_by_mode)
 						const prevValues = prevRecord
-							? parseValues(prevRecord.values_by_mode)
+							? parseHistoryValues(prevRecord.values_by_mode)
 							: null
+
+						const chain = variableChains.get(record.variable_id) || []
 
 						return (
 							<div
@@ -370,6 +441,65 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 										)}
 									</div>
 								</div>
+
+								{chain.length > 1 && (
+									<>
+										<div className='history-record__chain-hint'>
+											Наведите на карточку — ниже появится хронология именно
+											этого токена.
+										</div>
+										<div className='history-record__chain'>
+											<div className='history-record__chain-head'>
+												<span className='history-record__chain-label'>
+													Хронология
+												</span>
+												<code className='history-record__chain-token-path'>
+													{record.variable.name}
+												</code>
+											</div>
+											<ol className='history-record__chain-steps'>
+												{chain.map(step => {
+													const stepVals = parseHistoryValues(
+														step.values_by_mode
+													)
+													const stepDate = new Date(
+														step.changed_at
+													).toLocaleString('ru-RU', {
+														day: '2-digit',
+														month: '2-digit',
+														year: 'numeric',
+														hour: '2-digit',
+														minute: '2-digit',
+													})
+													return (
+														<li
+															key={step.id}
+															className='history-record__chain-step'
+														>
+															<div className='history-record__chain-step-line'>
+																<span className='history-record__chain-step-date'>
+																	{stepDate}
+																</span>
+																<span
+																	className={`history-record__badge history-record__badge--${step.change_type}`}
+																>
+																	{changeTypeLabels[step.change_type]}
+																</span>
+															</div>
+															<div className='history-record__chain-step-value'>
+																{formatValue(
+																	record.variable.type,
+																	stepVals,
+																	allVariables
+																)}
+															</div>
+														</li>
+													)
+												})}
+											</ol>
+										</div>
+									</>
+								)}
 							</div>
 						)
 					})}

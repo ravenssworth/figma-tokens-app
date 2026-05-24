@@ -355,7 +355,7 @@ app.post(
 				[
 					collectionId,
 					version_name,
-					version_tag || 'draft',
+					version_tag || 'черновик',
 					description || '',
 					snapshotData,
 				]
