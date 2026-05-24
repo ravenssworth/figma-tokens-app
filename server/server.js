@@ -18,6 +18,9 @@ app.use(express.json())
 app.use(express.static(path.join(__dirname, './client_dist')))
 
 const pool = require('./database.js')
+const { runMigrations } = require('./dbMigrations.js')
+const { logVersionEvent } = require('./versionHistory.js')
+const { resolveProjectId, parseProjectIdQuery } = require('./projects.js')
 
 const { hasVariableChanged, deepEqual } = require('./utils/tokensUtils')
 
@@ -49,18 +52,75 @@ try {
 
 pool
 	.query('SELECT 1 + 1 AS solution')
-	.then(([rows]) =>
+	.then(async ([rows]) => {
 		console.log('Подключение к БД успешно. Результат теста:', rows[0].solution)
-	)
+		try {
+			await runMigrations()
+		} catch (err) {
+			console.error('Ошибка миграций БД:', err.message)
+		}
+	})
 	.catch(err => console.error('Ошибка подключения к БД:', err.message))
 
 app.get('/', (req, res) => {
 	res.send('Сервер для приёма дизайн-токенов работает!')
 })
 
+app.get('/api/projects', async (req, res) => {
+	try {
+		const [rows] = await pool.query(
+			`SELECT p.id, p.name, p.created_at, p.updated_at,
+              COUNT(DISTINCT c.id) AS collections_count
+       FROM projects p
+       LEFT JOIN collections c ON c.project_id = p.id
+       GROUP BY p.id, p.name, p.created_at, p.updated_at
+       ORDER BY p.updated_at DESC, p.id DESC`
+		)
+		res.json({ success: true, data: rows })
+	} catch (error) {
+		console.error('Ошибка получения проектов:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
+app.post('/api/projects', async (req, res) => {
+	try {
+		const name = String(req.body?.name || '').trim()
+		if (!name) {
+			return res.status(400).json({
+				success: false,
+				error: 'Укажите название проекта',
+			})
+		}
+
+		const [existing] = await pool.query('SELECT * FROM projects WHERE name = ?', [
+			name,
+		])
+		if (existing.length > 0) {
+			return res.json({ success: true, data: existing[0], created: false })
+		}
+
+		const [result] = await pool.query('INSERT INTO projects (name) VALUES (?)', [
+			name,
+		])
+		const [rows] = await pool.query('SELECT * FROM projects WHERE id = ?', [
+			result.insertId,
+		])
+		res.status(201).json({ success: true, data: rows[0], created: true })
+	} catch (error) {
+		console.error('Ошибка создания проекта:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
 app.post('/api/tokens', async (req, res) => {
 	console.log('Обработка полученных токенов...')
-	const { variables: newVariables, collections } = req.body
+	const {
+		variables: newVariables,
+		collections,
+		projectId,
+		projectName,
+	} = req.body
 
 	if (!newVariables || !collections) {
 		return res.status(400).json({
@@ -72,25 +132,41 @@ app.post('/api/tokens', async (req, res) => {
 	const connection = await pool.getConnection()
 
 	try {
+		let resolvedProjectId
+		try {
+			resolvedProjectId = await resolveProjectId(connection, {
+				projectId,
+				projectName,
+			})
+		} catch (err) {
+			return res.status(400).json({ success: false, error: err.message })
+		}
+
 		await connection.beginTransaction()
 
 		const stats = { created: 0, updated: 0, deleted: 0, unchanged: 0 }
 
 		for (const collection of collections) {
 			await connection.execute(
-				`INSERT INTO collections (id, name, modes, created_at) 
-                 VALUES (?, ?, ?, NOW()) 
+				`INSERT INTO collections (project_id, id, name, modes, created_at) 
+                 VALUES (?, ?, ?, ?, NOW()) 
                  ON DUPLICATE KEY UPDATE 
                  name = VALUES(name), 
                  modes = VALUES(modes)`,
-				[collection.id, collection.name, JSON.stringify(collection.modes)]
+				[
+					resolvedProjectId,
+					collection.id,
+					collection.name,
+					JSON.stringify(collection.modes),
+				]
 			)
 		}
 
 		for (const collection of collections) {
 			const [existingVariables] = await connection.query(
-				'SELECT * FROM variables WHERE collection_id = ? AND is_deleted = FALSE',
-				[collection.id]
+				`SELECT * FROM variables 
+         WHERE project_id = ? AND collection_id = ? AND is_deleted = FALSE`,
+				[resolvedProjectId, collection.id]
 			)
 
 			const existingVarMap = new Map()
@@ -107,13 +183,14 @@ app.post('/api/tokens', async (req, res) => {
 
 				if (!existingVar) {
 					await connection.execute(
-						`INSERT INTO variables (id, name, type, values_by_mode, collection_id, created_at) 
-                         VALUES (?, ?, ?, ?, ?, NOW())`,
+						`INSERT INTO variables (id, name, type, values_by_mode, project_id, collection_id, created_at) 
+                         VALUES (?, ?, ?, ?, ?, ?, NOW())`,
 						[
 							newVar.id,
 							newVar.name,
 							newVar.type,
 							JSON.stringify(newVar.valuesByMode),
+							resolvedProjectId,
 							collection.id,
 						]
 					)
@@ -192,6 +269,7 @@ app.post('/api/tokens', async (req, res) => {
 		res.status(200).json({
 			success: true,
 			message: 'Обработка завершена',
+			projectId: resolvedProjectId,
 			stats: stats,
 		})
 	} catch (error) {
@@ -209,8 +287,17 @@ app.post('/api/tokens', async (req, res) => {
 
 app.get('/api/collections', async (req, res) => {
 	try {
+		const projectId = parseProjectIdQuery(req.query.projectId)
+		if (!projectId) {
+			return res.status(400).json({
+				success: false,
+				error: 'Укажите projectId в query-параметре',
+			})
+		}
+
 		const [rows] = await pool.query(
-			'SELECT * FROM collections ORDER BY created_at DESC'
+			'SELECT * FROM collections WHERE project_id = ? ORDER BY created_at DESC',
+			[projectId]
 		)
 		res.json({ success: true, data: rows })
 	} catch (error) {
@@ -221,13 +308,26 @@ app.get('/api/collections', async (req, res) => {
 
 app.get('/api/variables', async (req, res) => {
 	try {
+		const projectId = parseProjectIdQuery(req.query.projectId)
 		const { collectionId } = req.query
-		let query =
-			'SELECT v.*, c.name as collection_name FROM variables v LEFT JOIN collections c ON v.collection_id = c.id'
-		const params = []
+
+		if (!projectId) {
+			return res.status(400).json({
+				success: false,
+				error: 'Укажите projectId в query-параметре',
+			})
+		}
+
+		let query = `
+      SELECT v.*, c.name AS collection_name
+      FROM variables v
+      LEFT JOIN collections c
+        ON v.project_id = c.project_id AND v.collection_id = c.id
+      WHERE v.project_id = ?`
+		const params = [projectId]
 
 		if (collectionId) {
-			query += ' WHERE v.collection_id = ?'
+			query += ' AND v.collection_id = ?'
 			params.push(collectionId)
 		}
 
@@ -255,12 +355,25 @@ app.get('/api/variables/:id/history', async (req, res) => {
 
 app.get('/api/variables/parsed', async (req, res) => {
 	try {
-		const [variables] = await pool.query(`
-            SELECT v.*, c.name as collection_name 
+		const projectId = parseProjectIdQuery(req.query.projectId)
+		if (!projectId) {
+			return res.status(400).json({
+				success: false,
+				error: 'Укажите projectId в query-параметре',
+			})
+		}
+
+		const [variables] = await pool.query(
+			`
+            SELECT v.*, c.name AS collection_name 
             FROM variables v 
-            LEFT JOIN collections c ON v.collection_id = c.id 
+            LEFT JOIN collections c
+              ON v.project_id = c.project_id AND v.collection_id = c.id
+            WHERE v.project_id = ?
             ORDER BY v.name
-        `)
+        `,
+			[projectId]
+		)
 
 		const variableMap = {}
 		variables.forEach(v => {
@@ -319,13 +432,49 @@ app.get('/api/variables/parsed', async (req, res) => {
 
 app.get('/api/collections/:collectionId/versions', async (req, res) => {
 	try {
+		const projectId = parseProjectIdQuery(req.query.projectId)
+		if (!projectId) {
+			return res.status(400).json({
+				success: false,
+				error: 'Укажите projectId в query-параметре',
+			})
+		}
+
 		const [rows] = await pool.query(
-			'SELECT * FROM collection_versions WHERE collection_id = ? ORDER BY created_at DESC',
-			[req.params.collectionId]
+			`SELECT id, project_id, collection_id, version_name, version_tag, description, created_at, deleted_at
+       FROM collection_versions
+       WHERE project_id = ? AND collection_id = ? AND deleted_at IS NULL
+       ORDER BY created_at DESC`,
+			[projectId, req.params.collectionId]
 		)
 		res.json({ success: true, data: rows })
 	} catch (error) {
 		console.error('Ошибка получения версий коллекции:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	}
+})
+
+app.get('/api/collections/:collectionId/version-history', async (req, res) => {
+	try {
+		const projectId = parseProjectIdQuery(req.query.projectId)
+		if (!projectId) {
+			return res.status(400).json({
+				success: false,
+				error: 'Укажите projectId в query-параметре',
+			})
+		}
+
+		const [rows] = await pool.query(
+			`SELECT id, version_id, project_id, collection_id, event_type, version_name, version_tag,
+              description, created_at
+       FROM version_history
+       WHERE project_id = ? AND collection_id = ?
+       ORDER BY created_at DESC`,
+			[projectId, req.params.collectionId]
+		)
+		res.json({ success: true, data: rows })
+	} catch (error) {
+		console.error('Ошибка получения истории версий:', error)
 		res.status(500).json({ success: false, error: 'Database error' })
 	}
 })
@@ -335,24 +484,33 @@ app.post(
 	authenticateToken,
 	async (req, res) => {
 		const { collectionId } = req.params
-		const { version_name, description, version_tag } = req.body
+		const { version_name, description, version_tag, projectId } = req.body
 
 		const connection = await pool.getConnection()
 		try {
+			let resolvedProjectId
+			try {
+				resolvedProjectId = await resolveProjectId(connection, { projectId })
+			} catch (err) {
+				return res.status(400).json({ success: false, error: err.message })
+			}
+
 			await connection.beginTransaction()
 
 			const [variables] = await connection.query(
-				'SELECT * FROM variables WHERE collection_id = ?',
-				[collectionId]
+				`SELECT * FROM variables
+         WHERE project_id = ? AND collection_id = ? AND is_deleted = FALSE`,
+				[resolvedProjectId, collectionId]
 			)
 
 			const snapshotData = JSON.stringify(variables)
 
 			const [result] = await connection.query(
 				`INSERT INTO collection_versions 
-       (collection_id, version_name, version_tag, description, snapshot_data) 
-       VALUES (?, ?, ?, ?, ?)`,
+       (project_id, collection_id, version_name, version_tag, description, snapshot_data) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
 				[
+					resolvedProjectId,
 					collectionId,
 					version_name,
 					version_tag || 'черновик',
@@ -367,6 +525,16 @@ app.post(
 				'SELECT * FROM collection_versions WHERE id = ?',
 				[result.insertId]
 			)
+
+			await logVersionEvent(connection, {
+				versionId: result.insertId,
+				projectId: resolvedProjectId,
+				collectionId,
+				eventType: 'created',
+				versionName: version_name,
+				versionTag: version_tag || 'черновик',
+				description: description || '',
+			})
 
 			res.json({
 				success: true,
@@ -383,10 +551,59 @@ app.post(
 	}
 )
 
+app.delete('/api/versions/:versionId', authenticateToken, async (req, res) => {
+	const connection = await pool.getConnection()
+	try {
+		await connection.beginTransaction()
+
+		const [versions] = await connection.query(
+			'SELECT * FROM collection_versions WHERE id = ? AND deleted_at IS NULL',
+			[req.params.versionId]
+		)
+
+		if (versions.length === 0) {
+			await connection.rollback()
+			return res
+				.status(404)
+				.json({ success: false, error: 'Версия не найдена или уже удалена' })
+		}
+
+		const version = versions[0]
+
+		await connection.query(
+			'UPDATE collection_versions SET deleted_at = NOW() WHERE id = ?',
+			[version.id]
+		)
+
+		await logVersionEvent(connection, {
+			versionId: version.id,
+			projectId: version.project_id,
+			collectionId: version.collection_id,
+			eventType: 'deleted',
+			versionName: version.version_name,
+			versionTag: version.version_tag,
+			description: version.description,
+		})
+
+		await connection.commit()
+
+		res.json({
+			success: true,
+			message: `Версия "${version.version_name}" удалена`,
+		})
+	} catch (error) {
+		await connection.rollback()
+		console.error('Ошибка удаления версии:', error)
+		res.status(500).json({ success: false, error: 'Database error' })
+	} finally {
+		connection.release()
+	}
+})
+
 app.get('/api/versions/:versionId/variables', async (req, res) => {
 	try {
 		const [versions] = await pool.query(
-			'SELECT * FROM collection_versions WHERE id = ?',
+			'SELECT * FROM collection_versions WHERE id = ? AND deleted_at IS NULL',
 			[req.params.versionId]
 		)
 

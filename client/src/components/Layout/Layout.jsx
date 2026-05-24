@@ -1,10 +1,12 @@
 import React from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
+import { useProject } from '../../context/ProjectContext'
 import './Layout.css'
 
-export function Layout({ children }) {
+export function Layout() {
 	const location = useLocation()
 	const navigate = useNavigate()
+	const { project, clearProject } = useProject()
 	const [user, setUser] = React.useState(null)
 
 	React.useEffect(() => {
@@ -25,12 +27,27 @@ export function Layout({ children }) {
 	const handleLogout = () => {
 		localStorage.removeItem('token')
 		setUser(null)
-		navigate('/')
+		navigate('/projects')
 	}
 
 	return (
 		<div className='layout'>
 			<header className='layout__header'>
+				<div className='layout__header-left'>
+					{project && (
+						<div className='layout__project-info'>
+							<span className='layout__project-label'>Проект:</span>
+							<span className='layout__project-name'>{project.name}</span>
+							<button
+								type='button'
+								className='layout__switch-project-btn'
+								onClick={() => navigate('/projects')}
+							>
+								Сменить
+							</button>
+						</div>
+					)}
+				</div>
 				{user ? (
 					<div className='layout__user-info'>
 						<span className='layout__username'>
@@ -53,33 +70,41 @@ export function Layout({ children }) {
 						<Link
 							to='/tokens'
 							className={`nav-link ${
-								location.pathname === '/tokens' || location.pathname === '/'
-									? 'active'
-									: ''
+								location.pathname === '/tokens' ? 'active' : ''
 							}`}
 						>
 							<span>Токены</span>
 						</Link>
-					<Link
-						to='/history'
-						className={`nav-link ${
-							location.pathname === '/history' ? 'active' : ''
-						}`}
-					>
-						<span>История изменений</span>
-					</Link>
-					<Link
-						to='/export'
-						className={`nav-link ${
-							location.pathname === '/export' ? 'active' : ''
-						}`}
-					>
-						<span>Экспорт</span>
-					</Link>
+						<Link
+							to='/history'
+							className={`nav-link ${
+								location.pathname === '/history' ? 'active' : ''
+							}`}
+						>
+							<span>История изменений</span>
+						</Link>
+						<Link
+							to='/export'
+							className={`nav-link ${
+								location.pathname === '/export' ? 'active' : ''
+							}`}
+						>
+							<span>Экспорт</span>
+						</Link>
 					</div>
-					<div className='nav-footer'></div>
+					<div className='nav-footer'>
+						<button
+							type='button'
+							className='layout__exit-project-btn'
+							onClick={clearProject}
+						>
+							К списку проектов
+						</button>
+					</div>
 				</nav>
-				<main className='content'>{children}</main>
+				<main className='content'>
+					<Outlet />
+				</main>
 			</div>
 		</div>
 	)

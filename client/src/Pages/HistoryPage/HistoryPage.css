@@ -1,84 +1,23 @@
 .history-page {
 	display: flex;
-	flex-direction: column;
-	gap: 1.25vw;
-	width: 45vw;
+	justify-content: center;
+	width: 100%;
 	height: 45vw;
 }
 
-.history-page__header {
+.history-page .history-panel {
+	width: 45vw;
+	height: 100%;
+}
+
+.history-empty {
 	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 0.8vw 1.2vw;
-	border-bottom: 0.05vw solid #e5e5e7;
-	background: white;
-	border-radius: 0.833vw;
-}
-
-.history-page__header-title {
-	display: flex;
-	align-items: center;
-	gap: 0.5vw;
-}
-
-.history-page__header-title h2 {
-	margin: 0;
-	padding: 0;
-}
-
-.history-page__header-title span {
-	color: #86868b;
-	background: #e5e5e7;
-	padding: 0.15vw 0.4vw;
-	border-radius: 0.3vw;
-	font-weight: 500;
-	flex-shrink: 0;
-}
-
-.history-page__collection-selector {
-	display: flex;
-	align-items: center;
-	gap: 0.5vw;
-}
-
-.history-page__collection-selector label {
-	color: #86868b;
-	font-weight: 500;
-}
-
-.history-page__collection-selector select {
-	padding: 0.3vw 0.5vw;
-	border: 0.05vw solid #d2d2d7;
-	border-radius: 0.433vw;
-	color: #1d1d1f;
-	background: white;
-	cursor: pointer;
-	transition: border-color 0.2s;
-	width: 12.199vw;
-}
-
-.history-page__collection-selector select:hover {
-	border-color: #86868b;
-}
-
-.history-page__collection-selector select:focus {
-	outline: none;
-	border-color: #007aff;
-	box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
-}
-
-.history-page__loading-container {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 1.25vw;
-	color: #86868b;
-}
-
-.history-page__loading-container i {
-	font-size: 2.5vw;
+	width: 45vw;
+	height: 100%;
+	background: white;
+	border-radius: 1.25vw;
+	box-shadow: 0 0.417vw 2.5vw rgba(0, 0, 0, 0.08);
 	color: #86868b;
 }

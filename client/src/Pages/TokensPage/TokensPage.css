@@ -319,6 +319,13 @@
 	max-width: 45vw;
 }
 
+.tokens-page__version-selector-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5vw;
+	flex-wrap: wrap;
+}
+
 .tokens-page__version-selector select {
 	padding: 0.3vw 0.5vw;
 	border-radius: 0.433vw;
@@ -329,6 +336,25 @@
 	box-sizing: border-box;
 	min-width: 12vw;
 	transition: border-color 0.2s;
+}
+
+.tokens-page__version-delete-btn {
+	padding: 0.3vw 0.65vw;
+	border-radius: 0.433vw;
+	border: 0.05vw solid #ff3b30;
+	background: #fff;
+	color: #ff3b30;
+	cursor: pointer;
+	font-weight: 500;
+	white-space: nowrap;
+	transition:
+		background 0.2s ease,
+		color 0.2s ease;
+}
+
+.tokens-page__version-delete-btn:hover {
+	background: #ff3b30;
+	color: #fff;
 }
 
 .tokens-page__version-selector select:hover {

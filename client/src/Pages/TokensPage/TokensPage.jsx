@@ -3,10 +3,13 @@ import { CollectionsPanel } from '../../components/CollectionsPanel/CollectionsP
 import { TokenTree } from '../../components/TokensTree/TokensTree'
 import { TokensTable } from '../../components/TokensTable/TokensTable'
 import { useNavigate } from 'react-router-dom'
+import { useProject } from '../../context/ProjectContext'
+import { withProjectQuery } from '../../utils/projectStorage'
 import { VERSION_TAG_OPTIONS } from '../../utils/versionUtils'
 import './TokensPage.css'
 
 export function TokensPage() {
+	const { project } = useProject()
 	const [collections, setCollections] = useState([])
 	const [variables, setVariables] = useState([])
 	const [versionVariables, setVersionVariables] = useState([])
@@ -60,8 +63,12 @@ export function TokensPage() {
 	}, [])
 
 	useEffect(() => {
+		if (!project?.id) return
+		setSelectedCollection(null)
+		setSelectedVersion(null)
+		setCollectionVersions([])
 		loadData()
-	}, [])
+	}, [project?.id])
 
 	useEffect(() => {
 		if (selectedCollection?.id) {
@@ -99,8 +106,8 @@ export function TokensPage() {
 			setError(null)
 
 			const [collectionsRes, variablesRes] = await Promise.all([
-				fetch('/api/collections'),
-				fetch('/api/variables'),
+				fetch(withProjectQuery('/api/collections', project.id)),
+				fetch(withProjectQuery('/api/variables', project.id)),
 			])
 
 			if (!collectionsRes.ok || !variablesRes.ok) {
@@ -130,7 +137,9 @@ export function TokensPage() {
 
 	async function loadCollectionVersions(collectionId) {
 		try {
-			const response = await fetch(`/api/collections/${collectionId}/versions`)
+			const response = await fetch(
+				withProjectQuery(`/api/collections/${collectionId}/versions`, project.id)
+			)
 			if (!response.ok) return
 
 			const data = await response.json()
@@ -166,6 +175,63 @@ export function TokensPage() {
 		}
 	}
 
+	async function handleDeleteVersion() {
+		if (!selectedVersion) return
+
+		const token = localStorage.getItem('token')
+		if (!token) {
+			setNotification({
+				type: 'error',
+				message: 'Для удаления версии необходимо авторизоваться',
+			})
+			setTimeout(() => navigate('/auth'), 1500)
+			return
+		}
+
+		const versionName = selectedVersion.version_name
+		if (
+			!globalThis.confirm(
+				`Удалить версию «${versionName}»? Снимок будет скрыт из списка, событие попадёт в историю.`
+			)
+		) {
+			return
+		}
+
+		try {
+			const response = await fetch(`/api/versions/${selectedVersion.id}`, {
+				method: 'DELETE',
+				headers: { Authorization: `Bearer ${token}` },
+			})
+			const data = await response.json()
+
+			if (data.success) {
+				setSelectedVersion(null)
+				await loadCollectionVersions(selectedCollection.id)
+				setNotification({
+					type: 'success',
+					message: `Версия «${versionName}» удалена`,
+				})
+			} else if (response.status === 401 || response.status === 403) {
+				setNotification({
+					type: 'error',
+					message: 'Сессия истекла. Необходимо авторизоваться',
+				})
+				setTimeout(() => navigate('/auth'), 1500)
+			} else {
+				setNotification({
+					type: 'error',
+					message: data.error || 'Не удалось удалить версию',
+				})
+			}
+		} catch (error) {
+			console.error('Ошибка удаления версии:', error)
+			setNotification({
+				type: 'error',
+				message: 'Не удалось удалить версию',
+			})
+		}
+	}
+
 	async function handleCreateVersion() {
 		const token = localStorage.getItem('token')
 		if (!token) {
@@ -197,6 +263,7 @@ export function TokensPage() {
 						Authorization: `Bearer ${token}`,
 					},
 					body: JSON.stringify({
+						projectId: project.id,
 						version_name: newVersionName.trim(),
 						description: newVersionDescription.trim(),
 						version_tag: newVersionTag,
@@ -332,30 +399,42 @@ export function TokensPage() {
 									>
 										Источник данных
 									</label>
-									<div className='tokens-page__version-selector'>
-										<select
-											id='version-select'
-											value={selectedVersion?.id || 'current'}
-											onChange={e => {
-												if (e.target.value === 'current') {
-													setSelectedVersion(null)
-												} else {
-													const version = collectionVersions.find(
-														v => v.id == e.target.value
-													)
-													setSelectedVersion(version)
-												}
-											}}
-										>
-											<option value='current'>Актуальное состояние</option>
-											<optgroup label='Снимок версии (только просмотр)'>
-												{collectionVersions.map(version => (
-													<option key={version.id} value={version.id}>
-														{version.version_name}
-													</option>
-												))}
-											</optgroup>
-										</select>
+									<div className='tokens-page__version-selector-row'>
+										<div className='tokens-page__version-selector'>
+											<select
+												id='version-select'
+												value={selectedVersion?.id || 'current'}
+												onChange={e => {
+													if (e.target.value === 'current') {
+														setSelectedVersion(null)
+													} else {
+														const version = collectionVersions.find(
+															v => v.id == e.target.value
+														)
+														setSelectedVersion(version)
+													}
+												}}
+											>
+												<option value='current'>Актуальное состояние</option>
+												<optgroup label='Снимок версии (только просмотр)'>
+													{collectionVersions.map(version => (
+														<option key={version.id} value={version.id}>
+															{version.version_name}
+														</option>
+													))}
+												</optgroup>
+											</select>
+										</div>
+										{selectedVersion && (
+											<button
+												type='button'
+												className='tokens-page__version-delete-btn'
+												onClick={handleDeleteVersion}
+												title='Удалить выбранную версию'
+											>
+												Удалить
+											</button>
+										)}
 									</div>
 								</div>
 							)}

@@ -34,3 +34,32 @@ export function sortVersionsForExportList(versions) {
 		return new Date(b.created_at) - new Date(a.created_at)
 	})
 }
+
+const VERSION_EVENT_LABELS = {
+	created: 'Создана',
+	deleted: 'Удалена',
+	restored: 'Восстановлена',
+}
+
+export function formatVersionEventType(eventType) {
+	return VERSION_EVENT_LABELS[eventType] || eventType
+}
+
+/** Текст события для списка истории версий. */
+export function formatVersionHistoryMessage(record) {
+	const name = record.version_name || 'без названия'
+	const tagLabel = formatVersionTagForDisplay(record.version_tag)
+
+	switch (record.event_type) {
+		case 'created':
+			return tagLabel
+				? `Создана версия «${name}» (${tagLabel})`
+				: `Создана версия «${name}»`
+		case 'deleted':
+			return `Удалена версия «${name}»`
+		case 'restored':
+			return `Восстановлена версия «${name}»`
+		default:
+			return `Версия «${name}»`
+	}
+}

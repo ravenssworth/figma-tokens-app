@@ -71,7 +71,7 @@ export function AuthPage() {
 
 			if (data.success) {
 				localStorage.setItem('token', data.token)
-				navigate('/')
+				navigate('/projects')
 			} else {
 				setError(
 					data.error || `Ошибка ${isLoginMode ? 'входа' : 'регистрации'}`

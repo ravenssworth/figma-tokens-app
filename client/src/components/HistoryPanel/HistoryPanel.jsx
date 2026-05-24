@@ -4,6 +4,13 @@ import {
 	getTypeLabel,
 	formatValue,
 } from '../../utils/tokenUtils'
+import {
+	formatVersionTagForDisplay,
+	formatVersionEventType,
+	formatVersionHistoryMessage,
+} from '../../utils/versionUtils'
+import { useProject } from '../../context/ProjectContext'
+import { withProjectQuery } from '../../utils/projectStorage'
 import './HistoryPanel.css'
 
 function parseHistoryValues(values) {
@@ -18,8 +25,49 @@ function parseHistoryValues(values) {
 	return values
 }
 
-export function HistoryPanel({ collection, variables: propsVariables }) {
+function formatRecordDate(iso) {
+	return new Date(iso).toLocaleDateString('ru-RU', {
+		day: '2-digit',
+		month: '2-digit',
+		year: 'numeric',
+		hour: '2-digit',
+		minute: '2-digit',
+	})
+}
+
+function filterByDateAndSearch(records, { isDateFilterActive, startDate, endDate, nameSearch, getSearchText }) {
+	return records.filter(record => {
+		if (isDateFilterActive) {
+			const recordDate = new Date(record.changed_at || record.created_at)
+			const start = startDate ? new Date(startDate) : null
+			const end = endDate ? new Date(endDate) : null
+
+			if (start) start.setHours(0, 0, 0, 0)
+			if (end) end.setHours(23, 59, 59, 999)
+
+			let isWithinRange = true
+			if (start) isWithinRange = isWithinRange && recordDate >= start
+			if (end) isWithinRange = isWithinRange && recordDate <= end
+			if (!isWithinRange) return false
+		}
+
+		const q = nameSearch.trim().toLowerCase()
+		if (q) {
+			const text = getSearchText(record).toLowerCase()
+			if (!text.includes(q)) return false
+		}
+
+		return true
+	})
+}
+
+export function HistoryPanel() {
+	const { project } = useProject()
+	const [collections, setCollections] = useState([])
+	const [selectedCollection, setSelectedCollection] = useState(null)
+	const [viewMode, setViewMode] = useState('tokens')
 	const [history, setHistory] = useState([])
+	const [versionHistory, setVersionHistory] = useState([])
 	const [loading, setLoading] = useState(true)
 	const [selectedVariable, setSelectedVariable] = useState(null)
 	const [startDate, setStartDate] = useState('')
@@ -41,9 +89,39 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 	}
 
 	useEffect(() => {
+		if (!project?.id) return
+
+		const loadCollections = async () => {
+			try {
+				const response = await fetch(
+					withProjectQuery('/api/collections', project.id)
+				)
+				const data = await response.json()
+				if (data.success) {
+					setCollections(data.data || [])
+					if (data.data?.length > 0) {
+						setSelectedCollection(data.data[0])
+					} else {
+						setSelectedCollection(null)
+					}
+				}
+			} catch (error) {
+				console.error('Ошибка загрузки коллекций:', error)
+			}
+		}
+
+		setSelectedCollection(null)
+		loadCollections()
+	}, [project?.id])
+
+	useEffect(() => {
+		if (!project?.id) return
+
 		const loadAllVariables = async () => {
 			try {
-				const collectionsResponse = await fetch('/api/collections')
+				const collectionsResponse = await fetch(
+					withProjectQuery('/api/collections', project.id)
+				)
 				if (!collectionsResponse.ok) return
 				const collectionsData = await collectionsResponse.json()
 
@@ -51,7 +129,10 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 					const allVars = []
 					for (const col of collectionsData.data) {
 						const varsResponse = await fetch(
-							`/api/variables?collectionId=${col.id}`
+							withProjectQuery(
+								`/api/variables?collectionId=${encodeURIComponent(col.id)}`,
+								project.id
+							)
 						)
 						if (varsResponse.ok) {
 							const varsData = await varsResponse.json()
@@ -68,10 +149,10 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		}
 
 		loadAllVariables()
-	}, [])
+	}, [project?.id])
 
 	useEffect(() => {
-		if (!collection?.id) {
+		if (!selectedCollection?.id || !project?.id) {
 			setCurrentCollectionVariables([])
 			return
 		}
@@ -79,7 +160,10 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		const loadCurrentVariables = async () => {
 			try {
 				const response = await fetch(
-					`/api/variables?collectionId=${collection.id}`
+					withProjectQuery(
+						`/api/variables?collectionId=${encodeURIComponent(selectedCollection.id)}`,
+						project.id
+					)
 				)
 				if (!response.ok) return
 				const data = await response.json()
@@ -92,17 +176,15 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 			}
 		}
 
-		if (propsVariables && Array.isArray(propsVariables)) {
-			setCurrentCollectionVariables(propsVariables)
-		} else {
-			loadCurrentVariables()
-		}
-	}, [collection, collection?.id, propsVariables])
+		loadCurrentVariables()
+	}, [selectedCollection, project?.id])
 
 	useEffect(() => {
-		if (!collection || currentCollectionVariables.length === 0) {
-			setHistory([])
-			setLoading(false)
+		if (viewMode !== 'tokens' || !selectedCollection || currentCollectionVariables.length === 0) {
+			if (viewMode === 'tokens') {
+				setHistory([])
+				setLoading(false)
+			}
 			return
 		}
 
@@ -118,34 +200,17 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 								history:
 									data.success && Array.isArray(data.data) ? data.data : [],
 							}))
-							.catch(error => {
-								console.error(`Ошибка загрузки истории для ${v.id}:`, error)
-								return {
-									variable: v,
-									history: [],
-								}
-							})
+							.catch(() => ({ variable: v, history: [] }))
 					)
 				)
 
 				const allHistory = responses
 					.flatMap(response => {
-						if (!response.history || !Array.isArray(response.history)) {
-							return []
-						}
+						if (!response.history?.length) return []
 						return response.history.map(record => ({
 							...record,
 							variable: response.variable,
-							formattedDate: new Date(record.changed_at).toLocaleDateString(
-								'ru-RU',
-								{
-									day: '2-digit',
-									month: '2-digit',
-									year: 'numeric',
-									hour: '2-digit',
-									minute: '2-digit',
-								}
-							),
+							formattedDate: formatRecordDate(record.changed_at),
 						}))
 					})
 					.sort((a, b) => new Date(b.changed_at) - new Date(a.changed_at))
@@ -160,7 +225,51 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		}
 
 		loadHistory()
-	}, [collection, currentCollectionVariables])
+	}, [selectedCollection, currentCollectionVariables, viewMode])
+
+	useEffect(() => {
+		if (viewMode !== 'versions' || !selectedCollection?.id) {
+			if (viewMode === 'versions') {
+				setVersionHistory([])
+				setLoading(false)
+			}
+			return
+		}
+
+		const loadVersionHistory = async () => {
+			setLoading(true)
+			try {
+				const response = await fetch(
+					withProjectQuery(
+						`/api/collections/${selectedCollection.id}/version-history`,
+						project.id
+					)
+				)
+				const data = await response.json()
+				if (data.success && Array.isArray(data.data)) {
+					setVersionHistory(
+						data.data
+							.map(record => ({
+								...record,
+								formattedDate: formatRecordDate(record.created_at),
+							}))
+							.sort(
+								(a, b) => new Date(b.created_at) - new Date(a.created_at)
+							)
+					)
+				} else {
+					setVersionHistory([])
+				}
+			} catch (error) {
+				console.error('Ошибка загрузки истории версий:', error)
+				setVersionHistory([])
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		loadVersionHistory()
+	}, [selectedCollection, viewMode])
 
 	const variableChains = useMemo(() => {
 		const map = new Map()
@@ -175,44 +284,29 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		return map
 	}, [history])
 
-	if (!collection) {
-		return (
-			<div className='history-empty'>
-				<p>Выберите коллекцию для просмотра истории изменений</p>
-			</div>
-		)
-	}
+	const filteredTokenHistory = useMemo(
+		() =>
+			filterByDateAndSearch(history, {
+				isDateFilterActive,
+				startDate,
+				endDate,
+				nameSearch,
+				getSearchText: r => r.variable?.name || '',
+			}),
+		[history, isDateFilterActive, startDate, endDate, nameSearch]
+	)
 
-	const filteredHistory = history.filter(record => {
-		if (isDateFilterActive) {
-			const recordDate = new Date(record.changed_at)
-			const start = startDate ? new Date(startDate) : null
-			const end = endDate ? new Date(endDate) : null
-
-			if (start) start.setHours(0, 0, 0, 0)
-			if (end) end.setHours(23, 59, 59, 999)
-
-			let isWithinRange = true
-			if (start) isWithinRange = isWithinRange && recordDate >= start
-			if (end) isWithinRange = isWithinRange && recordDate <= end
-			if (!isWithinRange) return false
-		}
-
-		const q = nameSearch.trim().toLowerCase()
-		if (q) {
-			const name = (record.variable?.name || '').toLowerCase()
-			if (!name.includes(q)) return false
-		}
-
-		return true
-	})
-
-	const uniqueVariableIds = new Set(filteredHistory.map(h => h.variable_id))
-	const stats = {
-		totalChanges: filteredHistory.length,
-		uniqueVariables: uniqueVariableIds.size,
-		lastChange: filteredHistory[0]?.formattedDate || 'Нет изменений',
-	}
+	const filteredVersionHistory = useMemo(
+		() =>
+			filterByDateAndSearch(versionHistory, {
+				isDateFilterActive,
+				startDate,
+				endDate,
+				nameSearch,
+				getSearchText: r => r.version_name || '',
+			}),
+		[versionHistory, isDateFilterActive, startDate, endDate, nameSearch]
+	)
 
 	const changeTypeLabels = {
 		created: 'Создана',
@@ -221,34 +315,126 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 		restored: 'Восстановлена',
 	}
 
-	const emptyMessage =
-		history.length === 0
-			? 'Нет изменений в этой коллекции'
+	const isTokensView = viewMode === 'tokens'
+	const activeList = isTokensView ? filteredTokenHistory : filteredVersionHistory
+	const sourceList = isTokensView ? history : versionHistory
+
+	const stats = isTokensView
+		? {
+				count: filteredTokenHistory.length,
+				lastLabel: 'Последнее изменение',
+				lastValue:
+					filteredTokenHistory[0]?.formattedDate || 'Нет изменений',
+		  }
+		: {
+				count: filteredVersionHistory.length,
+				lastLabel: 'Последнее событие',
+				lastValue:
+					filteredVersionHistory[0]?.formattedDate || 'Нет событий',
+		  }
+
+	const emptyMessage = !selectedCollection
+		? 'Выберите коллекцию'
+		: sourceList.length === 0
+			? isTokensView
+				? 'Нет изменений в этой коллекции'
+				: 'Нет событий по версиям в этой коллекции'
 			: 'Нет записей по заданным условиям (период или поиск)'
+
+	const searchPlaceholder = isTokensView
+		? 'Имя или часть пути токена'
+		: 'Название версии'
+
+	if (!collections.length && !loading) {
+		return (
+			<div className='history-empty'>
+				<p>Нет коллекций. Экспортируйте токены из Figma.</p>
+			</div>
+		)
+	}
 
 	return (
 		<div className='history-panel'>
 			<div className='history-panel__header'>
-				<div className='history-panel__header-main'>
+				<div className='history-panel__header-top'>
 					<div className='history-panel__header-title'>
-						<h3>История изменений коллекции "{collection.name}"</h3>
-						<span className='stat-value'>{stats.totalChanges}</span>
+						<h3>История изменений</h3>
+						<span className='stat-value'>{stats.count}</span>
 					</div>
-					<p className='history-panel__header-meta'>
-						Последнее изменение: {stats.lastChange}
-					</p>
+
+					<div className='history-panel__header-controls'>
+						<div className='history-panel__collection-selector'>
+							<label htmlFor='history-collection-select'>Коллекция</label>
+							<select
+								id='history-collection-select'
+								value={selectedCollection?.id || ''}
+								onChange={e => {
+									const col = collections.find(c => c.id === e.target.value)
+									setSelectedCollection(col || null)
+									setSelectedVariable(null)
+								}}
+							>
+								{collections.map(collection => (
+									<option key={collection.id} value={collection.id}>
+										{collection.name}
+									</option>
+								))}
+							</select>
+						</div>
+
+						<div
+							className='history-panel__view-toggle'
+							role='group'
+							aria-label='Тип истории'
+						>
+							<button
+								type='button'
+								className={`history-panel__view-toggle-btn${
+									isTokensView ? ' history-panel__view-toggle-btn--active' : ''
+								}`}
+								onClick={() => {
+									setViewMode('tokens')
+									setNameSearch('')
+								}}
+							>
+								Токены
+							</button>
+							<button
+								type='button'
+								className={`history-panel__view-toggle-btn${
+									!isTokensView ? ' history-panel__view-toggle-btn--active' : ''
+								}`}
+								onClick={() => {
+									setViewMode('versions')
+									setNameSearch('')
+									setSelectedVariable(null)
+								}}
+							>
+								Версии
+							</button>
+						</div>
+					</div>
 				</div>
+
+				{selectedCollection && (
+					<p className='history-panel__header-meta'>
+						{selectedCollection.name} · {stats.lastLabel}: {stats.lastValue}
+					</p>
+				)}
 
 				<div className='history-panel__toolbar'>
 					<div className='history-panel__toolbar-search'>
-						<label className='history-panel__toolbar-label' htmlFor='history-token-search'>
+						<label
+							className='history-panel__toolbar-label'
+							htmlFor='history-search'
+						>
 							Поиск
 						</label>
 						<input
-							id='history-token-search'
+							id='history-search'
 							type='search'
 							className='history-panel__search-input'
-							placeholder='Имя или часть пути токена'
+							placeholder={searchPlaceholder}
 							value={nameSearch}
 							onChange={e => setNameSearch(e.target.value)}
 							autoComplete='off'
@@ -266,10 +452,7 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 									if (on) resetPeriod()
 								}}
 							/>
-							<span
-								className='history-panel__checkbox-ui'
-								aria-hidden='true'
-							/>
+							<span className='history-panel__checkbox-ui' aria-hidden='true' />
 							<span className='history-panel__date-filter-toggle-text'>
 								Фильтр по периоду
 							</span>
@@ -305,15 +488,15 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 
 			{loading ? (
 				<div className='history-panel__loading'>
-					<p>Загрузка истории изменений...</p>
+					<p>Загрузка…</p>
 				</div>
-			) : filteredHistory.length === 0 ? (
+			) : activeList.length === 0 ? (
 				<div className='history-panel__empty'>
 					<p>{emptyMessage}</p>
 				</div>
-			) : (
+			) : isTokensView ? (
 				<div className='history-panel__list'>
-					{filteredHistory.map(record => {
+					{filteredTokenHistory.map(record => {
 						const fullIdx = history.findIndex(h => h.id === record.id)
 						const prevRecord =
 							fullIdx >= 0
@@ -324,12 +507,10 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 
 						const isCreated = !prevRecord
 						const changeType = record.change_type
-
 						const currentValues = parseHistoryValues(record.values_by_mode)
 						const prevValues = prevRecord
 							? parseHistoryValues(prevRecord.values_by_mode)
 							: null
-
 						const chain = variableChains.get(record.variable_id) || []
 
 						return (
@@ -381,7 +562,7 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 																currentValues,
 																allVariables
 															)}
-														></span>
+														/>
 													)}
 													<span className='history-record__value-text'>
 														{formatValue(
@@ -404,7 +585,7 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 																	prevValues,
 																	allVariables
 																)}
-															></span>
+															/>
 														)}
 														<span className='history-record__value-text'>
 															{formatValue(
@@ -426,7 +607,7 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 																	currentValues,
 																	allVariables
 																)}
-															></span>
+															/>
 														)}
 														<span className='history-record__value-text'>
 															{formatValue(
@@ -462,15 +643,6 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 													const stepVals = parseHistoryValues(
 														step.values_by_mode
 													)
-													const stepDate = new Date(
-														step.changed_at
-													).toLocaleString('ru-RU', {
-														day: '2-digit',
-														month: '2-digit',
-														year: 'numeric',
-														hour: '2-digit',
-														minute: '2-digit',
-													})
 													return (
 														<li
 															key={step.id}
@@ -478,7 +650,7 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 														>
 															<div className='history-record__chain-step-line'>
 																<span className='history-record__chain-step-date'>
-																	{stepDate}
+																	{formatRecordDate(step.changed_at)}
 																</span>
 																<span
 																	className={`history-record__badge history-record__badge--${step.change_type}`}
@@ -503,6 +675,41 @@ export function HistoryPanel({ collection, variables: propsVariables }) {
 							</div>
 						)
 					})}
+				</div>
+			) : (
+				<div className='history-panel__list'>
+					{filteredVersionHistory.map(record => (
+						<div
+							key={record.id}
+							className={`history-record history-record--version history-record--version-${record.event_type}`}
+						>
+							<div className='history-record__header'>
+								<div className='history-record__date'>
+									{record.formattedDate}
+								</div>
+								<div
+									className={`history-record__badge history-record__badge--${record.event_type}`}
+								>
+									{formatVersionEventType(record.event_type)}
+								</div>
+							</div>
+							<div className='history-record__version-body'>
+								<p className='history-record__version-message'>
+									{formatVersionHistoryMessage(record)}
+								</p>
+								{record.description?.trim() && (
+									<p className='history-record__version-description'>
+										{record.description.trim()}
+									</p>
+								)}
+								{record.version_tag && record.event_type === 'created' && (
+									<span className='history-record__version-tag'>
+										{formatVersionTagForDisplay(record.version_tag)}
+									</span>
+								)}
+							</div>
+						</div>
+					))}
 				</div>
 			)}
 		</div>

@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import { useProject } from '../../context/ProjectContext'
+import { withProjectQuery } from '../../utils/projectStorage'
 import {
 	formatVersionTagForDisplay,
 	isReleaseVersionTag,
@@ -7,6 +9,7 @@ import {
 import './ExportPage.css'
 
 const ExportPage = () => {
+	const { project } = useProject()
 	const [collections, setCollections] = useState([])
 	const [selectedCollection, setSelectedCollection] = useState(null)
 	const [versions, setVersions] = useState([])
@@ -31,8 +34,13 @@ const ExportPage = () => {
 	const [fileName, setFileName] = useState('')
 
 	useEffect(() => {
+		if (!project?.id) return
+		setSelectedCollection(null)
+		setSelectedVersion(null)
+		setVersions([])
+		setTokens([])
 		loadCollections()
-	}, [])
+	}, [project?.id])
 
 	// Load versions when collection is selected
 	useEffect(() => {
@@ -56,7 +64,9 @@ const ExportPage = () => {
 
 	async function loadCollections() {
 		try {
-			const response = await fetch('/api/collections')
+			const response = await fetch(
+				withProjectQuery('/api/collections', project.id)
+			)
 			const data = await response.json()
 
 			if (data.success) {
@@ -72,7 +82,12 @@ const ExportPage = () => {
 
 	async function loadVersions(collectionId) {
 		try {
-			const response = await fetch(`/api/collections/${collectionId}/versions`)
+			const response = await fetch(
+				withProjectQuery(
+					`/api/collections/${collectionId}/versions`,
+					project.id
+				)
+			)
 			const data = await response.json()
 
 			if (data.success) {
@@ -96,7 +111,7 @@ const ExportPage = () => {
 			setLoadingTokens(true)
 			const [versionResponse, allVariablesResponse] = await Promise.all([
 				fetch(`/api/versions/${versionId}/variables`),
-				fetch('/api/variables'),
+				fetch(withProjectQuery('/api/variables', project.id)),
 			])
 			const [data, allVariablesData] = await Promise.all([
 				versionResponse.json(),
