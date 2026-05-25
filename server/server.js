@@ -68,15 +68,54 @@ app.get('/', (req, res) => {
 
 app.get('/api/projects', async (req, res) => {
 	try {
+		const { collectColorsFromVariables } = require('./utils/projectPreview.js')
+
 		const [rows] = await pool.query(
 			`SELECT p.id, p.name, p.created_at, p.updated_at,
-              COUNT(DISTINCT c.id) AS collections_count
+              COUNT(DISTINCT c.id) AS collections_count,
+              COUNT(DISTINCT v.id) AS variables_count,
+              COUNT(DISTINCT cv.id) AS versions_count,
+              MAX(v.updated_at) AS last_token_update
        FROM projects p
        LEFT JOIN collections c ON c.project_id = p.id
+       LEFT JOIN variables v ON v.project_id = p.id AND v.is_deleted = FALSE
+       LEFT JOIN collection_versions cv
+         ON cv.project_id = p.id AND cv.deleted_at IS NULL
        GROUP BY p.id, p.name, p.created_at, p.updated_at
        ORDER BY p.updated_at DESC, p.id DESC`
 		)
-		res.json({ success: true, data: rows })
+
+		const [colorRows] = await pool.query(
+			`SELECT project_id, values_by_mode
+       FROM variables
+       WHERE type = 'COLOR' AND is_deleted = FALSE
+       ORDER BY updated_at DESC`
+		)
+
+		const colorsByProject = new Map()
+		for (const row of colorRows) {
+			const pid = row.project_id
+			if (!colorsByProject.has(pid)) {
+				colorsByProject.set(pid, [])
+			}
+			const list = colorsByProject.get(pid)
+			if (list.length >= 8) continue
+			list.push(row)
+		}
+
+		const data = rows.map(project => {
+			const colorVars = colorsByProject.get(project.id) || []
+			const palette = collectColorsFromVariables(colorVars)
+			return {
+				...project,
+				palette,
+				variables_count: Number(project.variables_count) || 0,
+				versions_count: Number(project.versions_count) || 0,
+				collections_count: Number(project.collections_count) || 0,
+			}
+		})
+
+		res.json({ success: true, data })
 	} catch (error) {
 		console.error('Ошибка получения проектов:', error)
 		res.status(500).json({ success: false, error: 'Database error' })

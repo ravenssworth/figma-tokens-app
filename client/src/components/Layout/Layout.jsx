@@ -27,7 +27,7 @@ export function Layout() {
 	const handleLogout = () => {
 		localStorage.removeItem('token')
 		setUser(null)
-		navigate('/projects')
+		navigate('/auth')
 	}
 
 	return (

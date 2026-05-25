@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './AuthPage.css'
 
@@ -11,6 +11,22 @@ export function AuthPage() {
 	const [error, setError] = useState('')
 	const [loading, setLoading] = useState(false)
 	const navigate = useNavigate()
+
+	useEffect(() => {
+		const token = localStorage.getItem('token')
+		if (!token) return
+
+		fetch('/api/auth/verify', {
+			headers: { Authorization: `Bearer ${token}` },
+		})
+			.then(res => res.json())
+			.then(data => {
+				if (data.success) {
+					navigate('/projects', { replace: true })
+				}
+			})
+			.catch(() => {})
+	}, [navigate])
 
 	const resetForm = () => {
 		setEmail('')

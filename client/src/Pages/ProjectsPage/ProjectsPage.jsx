@@ -1,15 +1,133 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useProject } from '../../context/ProjectContext'
 import './ProjectsPage.css'
 
+function formatLastUpdate(iso) {
+	if (!iso) return 'Нет импорта из Figma'
+	try {
+		return new Date(iso).toLocaleString('ru-RU', {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit',
+		})
+	} catch {
+		return '—'
+	}
+}
+
+function paletteGradient(colors) {
+	if (!colors?.length) {
+		return 'linear-gradient(135deg, #e5e5e7 0%, #f5f5f7 50%, #d2d2d7 100%)'
+	}
+	if (colors.length === 1) {
+		return `linear-gradient(135deg, ${colors[0]} 0%, ${colors[0]} 100%)`
+	}
+	const stops = colors
+		.map((hex, i) => {
+			const pct = Math.round((i / (colors.length - 1)) * 100)
+			return `${hex} ${pct}%`
+		})
+		.join(', ')
+	return `linear-gradient(135deg, ${stops})`
+}
+
+function ProjectCard({ project, isActive, onOpen }) {
+	const palette = project.palette || []
+	const hasColors = palette.length > 0
+
+	return (
+		<article
+			className={`project-card${isActive ? ' project-card--active' : ''}`}
+			role='button'
+			tabIndex={0}
+			onClick={onOpen}
+			onKeyDown={e => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault()
+					onOpen()
+				}
+			}}
+		>
+			<div
+				className='project-card__cover'
+				style={{ background: paletteGradient(palette) }}
+			>
+				{hasColors ? (
+					<div className='project-card__swatches'>
+						{palette.slice(0, 6).map(hex => (
+							<span
+								key={hex}
+								className='project-card__swatch'
+								style={{ backgroundColor: hex }}
+								title={hex}
+							/>
+						))}
+					</div>
+				) : (
+					<span className='project-card__no-colors'>
+						Палитра появится после импорта цветовых токенов
+					</span>
+				)}
+			</div>
+
+			<div className='project-card__body'>
+				<div className='project-card__head'>
+					<h2 className='project-card__name'>{project.name}</h2>
+					{isActive && (
+						<span className='project-card__badge'>Текущий</span>
+					)}
+				</div>
+
+				<div className='project-card__stats'>
+					<div className='project-card__stat'>
+						<span className='project-card__stat-value'>
+							{project.collections_count ?? 0}
+						</span>
+						<span className='project-card__stat-label'>коллекций</span>
+					</div>
+					<div className='project-card__stat'>
+						<span className='project-card__stat-value'>
+							{project.variables_count ?? 0}
+						</span>
+						<span className='project-card__stat-label'>токенов</span>
+					</div>
+					<div className='project-card__stat'>
+						<span className='project-card__stat-value'>
+							{project.versions_count ?? 0}
+						</span>
+						<span className='project-card__stat-label'>версий</span>
+					</div>
+				</div>
+
+				<p className='project-card__meta'>
+					Обновление: {formatLastUpdate(project.last_token_update)}
+				</p>
+
+				<button
+					type='button'
+					className='project-card__open-btn'
+					onClick={e => {
+						e.stopPropagation()
+						onOpen()
+					}}
+				>
+					Открыть проект
+				</button>
+			</div>
+		</article>
+	)
+}
+
 export function ProjectsPage() {
+	const navigate = useNavigate()
 	const { project, selectProject } = useProject()
 	const [projects, setProjects] = useState([])
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(null)
-	const [newName, setNewName] = useState('')
-	const [creating, setCreating] = useState(false)
+	const [userLabel, setUserLabel] = useState('')
 
 	async function loadProjects() {
 		setLoading(true)
@@ -31,117 +149,79 @@ export function ProjectsPage() {
 	}
 
 	useEffect(() => {
+		const token = localStorage.getItem('token')
+		if (token) {
+			fetch('/api/auth/verify', {
+				headers: { Authorization: `Bearer ${token}` },
+			})
+				.then(res => res.json())
+				.then(data => {
+					if (data.success && data.user) {
+						setUserLabel(data.user.username || data.user.email)
+					}
+				})
+				.catch(() => {})
+		}
 		loadProjects()
 	}, [])
 
-	async function handleCreate(e) {
-		e.preventDefault()
-		const name = newName.trim()
-		if (!name) return
-
-		setCreating(true)
-		setError(null)
-		try {
-			const response = await fetch('/api/projects', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ name }),
-			})
-			const data = await response.json()
-			if (data.success && data.data) {
-				setNewName('')
-				selectProject(data.data)
-			} else {
-				setError(data.error || 'Не удалось создать проект')
-			}
-		} catch (err) {
-			console.error(err)
-			setError('Ошибка сети при создании проекта')
-		} finally {
-			setCreating(false)
-		}
+	function handleLogout() {
+		localStorage.removeItem('token')
+		navigate('/auth')
 	}
 
 	return (
 		<div className='projects-page'>
-			<div className='projects-page__card'>
-				<Link to='/auth' className='projects-page__auth-link'>
-					Войти
-				</Link>
+			<header className='projects-page__topbar'>
+				<div className='projects-page__brand'>
+					<h1>Дизайн-токены</h1>
+					<p>Выберите проект, импортированный из Figma</p>
+				</div>
+				<div className='projects-page__topbar-actions'>
+					{userLabel && (
+						<span className='projects-page__user'>{userLabel}</span>
+					)}
+					<button
+						type='button'
+						className='projects-page__logout'
+						onClick={handleLogout}
+					>
+						Выйти
+					</button>
+				</div>
+			</header>
 
-				<div className='projects-page__header'>
-					<h1>Проекты</h1>
-					<p className='projects-page__subtitle'>
-						Выберите проект, чтобы работать с токенами, историей и экспортом.
-						Данные из Figma привязываются к проекту при импорте в плагине.
+			<div className='projects-page__hint'>
+				<strong>Новые проекты создаются в плагине Figma</strong> — укажите
+				название при экспорте токенов. Здесь можно только открыть уже
+				существующий проект.
+			</div>
+
+			{error && <p className='projects-page__error'>{error}</p>}
+
+			{loading ? (
+				<p className='projects-page__loading'>Загрузка проектов…</p>
+			) : projects.length === 0 ? (
+				<div className='projects-page__empty-card'>
+					<h2>Проектов пока нет</h2>
+					<p>
+						Откройте плагин в Figma, задайте название проекта и нажмите
+						«Экспортировать данные». После этого проект появится в этом списке
+						с палитрой цветов и статистикой.
 					</p>
 				</div>
-
-				<form className='projects-page__create' onSubmit={handleCreate}>
-					<label htmlFor='new-project-name'>Новый проект</label>
-					<div className='projects-page__create-row'>
-						<input
-							id='new-project-name'
-							type='text'
-							placeholder='Название проекта'
-							value={newName}
-							onChange={e => setNewName(e.target.value)}
-							autoComplete='off'
+			) : (
+				<div className='projects-page__grid'>
+					{projects.map(p => (
+						<ProjectCard
+							key={p.id}
+							project={p}
+							isActive={project?.id === p.id}
+							onOpen={() => selectProject(p)}
 						/>
-						<button
-							type='submit'
-							className='projects-page__btn projects-page__btn--primary'
-							disabled={creating || !newName.trim()}
-						>
-							Создать
-						</button>
-					</div>
-				</form>
-
-				<h2 className='projects-page__list-title'>Существующие проекты</h2>
-
-				{error && <p className='projects-page__error'>{error}</p>}
-
-				{loading ? (
-					<p className='projects-page__loading'>Загрузка…</p>
-				) : (
-					<div className='projects-page__list'>
-						{projects.length === 0 ? (
-							<p className='projects-page__empty'>
-								Проектов пока нет. Создайте первый или импортируйте токены из
-								Figma, указав название проекта в плагине.
-							</p>
-						) : (
-							projects.map(p => (
-								<div
-									key={p.id}
-									className='projects-page__item'
-									role='button'
-									tabIndex={0}
-									onClick={() => selectProject(p)}
-									onKeyDown={e => {
-										if (e.key === 'Enter' || e.key === ' ') {
-											e.preventDefault()
-											selectProject(p)
-										}
-									}}
-								>
-									<div className='projects-page__item-info'>
-										<span className='projects-page__item-name'>{p.name}</span>
-										<span className='projects-page__item-meta'>
-											Коллекций: {p.collections_count ?? 0}
-											{project?.id === p.id ? ' · открыт сейчас' : ''}
-										</span>
-									</div>
-									<span className='projects-page__btn projects-page__btn--primary'>
-										Открыть
-									</span>
-								</div>
-							))
-						)}
-					</div>
-				)}
-			</div>
+					))}
+				</div>
+			)}
 		</div>
 	)
 }

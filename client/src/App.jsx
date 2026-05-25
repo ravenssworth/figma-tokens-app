@@ -10,6 +10,7 @@ import { ProjectsPage } from './Pages/ProjectsPage/ProjectsPage'
 import { Layout } from './components/Layout/Layout'
 import { AuthPage } from './Pages/AuthPage/AuthPage'
 import ExportPage from './Pages/ExportPage/ExportPage.jsx'
+import { RequireAuth } from './components/RequireAuth/RequireAuth'
 import { ProjectProvider, RequireProject } from './context/ProjectContext'
 import './App.css'
 
@@ -19,20 +20,24 @@ function App() {
 			<ProjectProvider>
 				<Routes>
 					<Route path='/auth' element={<AuthPage />} />
-					<Route path='/projects' element={<ProjectsPage />} />
-					<Route
-						element={
-							<RequireProject>
-								<Layout />
-							</RequireProject>
-						}
-					>
-						<Route path='/tokens' element={<TokensPage />} />
-						<Route path='/history' element={<HistoryPage />} />
-						<Route path='/export' element={<ExportPage />} />
+					<Route path='/' element={<Navigate to='/auth' replace />} />
+
+					<Route element={<RequireAuth />}>
+						<Route path='/projects' element={<ProjectsPage />} />
+						<Route
+							element={
+								<RequireProject>
+									<Layout />
+								</RequireProject>
+							}
+						>
+							<Route path='/tokens' element={<TokensPage />} />
+							<Route path='/history' element={<HistoryPage />} />
+							<Route path='/export' element={<ExportPage />} />
+						</Route>
 					</Route>
-					<Route path='/' element={<Navigate to='/projects' replace />} />
-					<Route path='*' element={<Navigate to='/projects' replace />} />
+
+					<Route path='*' element={<Navigate to='/auth' replace />} />
 				</Routes>
 			</ProjectProvider>
 		</Router>
