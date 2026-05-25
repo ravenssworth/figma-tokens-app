@@ -24,6 +24,33 @@ function isValidSemver(version) {
 	return /^\d+\.\d+\.\d+(-[\w.-]+)?(\+[\w.-]+)?$/.test(String(version).trim())
 }
 
+function formatNpmPublishError(error) {
+	const stderr = error.stderr ? String(error.stderr) : ''
+	const message = error.message ? String(error.message) : ''
+	const combined = `${message}\n${stderr}`
+
+	if (
+		/E403|403 Forbidden/i.test(combined) &&
+		/(two-factor|2fa|bypass 2fa)/i.test(combined)
+	) {
+		return (
+			'npm требует 2FA для публикации. Создайте новый токен: Granular с опцией ' +
+			'«Bypass 2FA for publish» или Classic → Automation. Затем обновите NPM_TOKEN в server/.env и перезапустите сервер.'
+		)
+	}
+
+	if (/E403|403 Forbidden/i.test(combined)) {
+		return 'Доступ запрещён (403). Проверьте права токена на scope @reifel и имя пакета @reifel/design-tokens.'
+	}
+
+	if (/E402|E403|401/.test(combined)) {
+		return 'Ошибка авторизации npm. Проверьте NPM_TOKEN и срок действия токена.'
+	}
+
+	const short = stderr.split('\n').find(line => /npm error/i.test(line))
+	return short || message || 'Неизвестная ошибка npm publish'
+}
+
 app.use(cors())
 app.use(express.json())
 app.use(express.static(path.join(__dirname, './client_dist')))
@@ -689,6 +716,13 @@ app.get('/api/versions/:versionId/variables', async (req, res) => {
 	}
 })
 
+app.get('/api/npm/status', (req, res) => {
+	res.json({
+		success: true,
+		hasServerToken: Boolean(process.env.NPM_TOKEN),
+	})
+})
+
 app.post('/api/npm/package', async (req, res) => {
 	const {
 		packageName,
@@ -742,21 +776,62 @@ app.post('/api/npm/package', async (req, res) => {
 			sideEffects: [entryFileName.endsWith('.css') ? entryFileName : '*.css'],
 		}
 
-		const jsExportLine = entryFileName.endsWith('.json')
-			? `module.exports = require('./${entryFileName}')`
-			: `module.exports = '${entryFileName}'`
-		const jsCssImportLine = entryFileName.endsWith('.css')
-			? `require('./${entryFileName}')\n`
-			: ''
+		if (entryFileName.endsWith('.css')) {
+			packageJson.style = entryFileName
+			packageJson.exports = {
+				'.': './index.js',
+				'./tokens.css': `./${entryFileName}`,
+				'./package.json': './package.json',
+			}
+		} else if (entryFileName.endsWith('.json')) {
+			packageJson.exports = {
+				'.': './index.js',
+				'./tokens.json': `./${entryFileName}`,
+			}
+		} else if (entryFileName.endsWith('.scss')) {
+			packageJson.exports = {
+				'.': './index.js',
+				[`./${entryFileName}`]: `./${entryFileName}`,
+			}
+		}
+
+		let indexJsContent = ''
+		if (entryFileName.endsWith('.json')) {
+			indexJsContent = `module.exports = require('./${entryFileName}')\n`
+		} else if (entryFileName.endsWith('.css')) {
+			indexJsContent = `require('./${entryFileName}')\nmodule.exports = '${entryFileName}'\n`
+		} else {
+			indexJsContent = `module.exports = '${entryFileName}'\n`
+		}
+
+		const installCmd = `npm install ${packageName}@${packageVersion}`
+		const readme = `# ${packageName}
+
+Пакет дизайн-токенов (Figma Tokens App).
+
+## Установка (команда для команды)
+
+\`\`\`bash
+${installCmd}
+\`\`\`
+
+## Использование
+
+### CSS (рекомендуется)
+\`\`\`js
+import '${packageName}'
+\`\`\`
+
+### Прямой импорт файла
+\`\`\`js
+import '${packageName}/${entryFileName}'
+\`\`\`
+`
 
 		await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf-8')
-		await fs.writeFile(
-			readmePath,
-			`# ${packageName}\n\nАвтогенерируемый пакет дизайн-токенов.\n`,
-			'utf-8',
-		)
+		await fs.writeFile(readmePath, readme, 'utf-8')
 		await fs.writeFile(entryPath, entryFileContent, 'utf-8')
-		await fs.writeFile(indexJsPath, `${jsCssImportLine}${jsExportLine}\n`, 'utf-8')
+		await fs.writeFile(indexJsPath, indexJsContent, 'utf-8')
 
 		const { stdout: packStdout } = await execFileAsync(
 			npmCmd,
@@ -820,10 +895,12 @@ app.post('/api/npm/package', async (req, res) => {
 		})
 	} catch (error) {
 		console.error('Ошибка сборки/publish npm-пакета:', error)
+		const stderr = error.stderr ? String(error.stderr) : ''
+		const friendly = formatNpmPublishError(error)
 		return res.status(500).json({
 			success: false,
-			error: 'Ошибка сборки/publish npm-пакета',
-			details: error.message,
+			error: friendly,
+			details: stderr ? stderr.slice(0, 500) : error.message,
 		})
 	} finally {
 		try {

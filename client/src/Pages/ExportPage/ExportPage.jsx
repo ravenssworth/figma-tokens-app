@@ -26,6 +26,7 @@ const ExportPage = () => {
 	const [isPublishing, setIsPublishing] = useState(false)
 	const [npmStatus, setNpmStatus] = useState('')
 	const [npmInstallHint, setNpmInstallHint] = useState('')
+	const [hasServerNpmToken, setHasServerNpmToken] = useState(false)
 	const [tokenTypes, setTokenTypes] = useState({
 		color: true,
 		number: true,
@@ -62,6 +63,15 @@ const ExportPage = () => {
 			setTokens([])
 		}
 	}, [selectedVersion])
+
+	useEffect(() => {
+		fetch('/api/npm/status')
+			.then(r => r.json())
+			.then(data => {
+				if (data.success) setHasServerNpmToken(Boolean(data.hasServerToken))
+			})
+			.catch(() => setHasServerNpmToken(false))
+	}, [])
 
 	async function loadCollections() {
 		try {
@@ -442,8 +452,10 @@ const ExportPage = () => {
 				setNpmStatus('Укажите версию npm-пакета')
 				return
 			}
-			if (shouldPublish && !npmToken.trim()) {
-				setNpmStatus('Для публикации нужен npm token')
+			if (shouldPublish && !npmToken.trim() && !hasServerNpmToken) {
+				setNpmStatus(
+					'Для публикации укажите npm token в форме или NPM_TOKEN в server/.env',
+				)
 				return
 			}
 
@@ -737,14 +749,18 @@ const ExportPage = () => {
 									className='export-page__filename-input'
 								/>
 								<label className='export-page__field-label' htmlFor='npm-token'>
-									npm token (только для публикации)
+									npm token {hasServerNpmToken ? '(на сервере уже задан)' : '(публикация)'}
 								</label>
 								<input
 									id='npm-token'
 									type='password'
 									value={npmToken}
 									onChange={e => setNpmToken(e.target.value)}
-									placeholder='npm token'
+									placeholder={
+										hasServerNpmToken
+											? 'можно оставить пустым'
+											: 'или NPM_TOKEN в server/.env'
+									}
 									className='export-page__filename-input'
 									autoComplete='off'
 								/>
