@@ -1,0 +1,235 @@
+/* Общая оболочка страниц (серая сцена layout-content__stage → белые блоки) */
+
+.page-workspace {
+	display: flex;
+	align-items: stretch;
+	gap: 1.1vw;
+	width: 100%;
+	max-width: min(96vw, 1520px);
+	height: 100%;
+	max-height: calc(100vh - 10rem);
+	min-height: 320px;
+	box-sizing: border-box;
+}
+
+.page-workspace--single {
+	max-width: min(96vw, 1200px);
+}
+
+.page-workspace--single .page-card--fill {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.page-workspace__main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.85vw;
+	min-height: 0;
+}
+
+.page-workspace__aside {
+	width: min(20vw, 280px);
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.7vw;
+	justify-content: flex-start;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.page-card {
+	background: #ffffff;
+	border: 1px solid #e5e5e7;
+	border-radius: 1.15vw;
+	box-shadow: 0 0.35vw 1.6vw rgba(0, 0, 0, 0.06);
+	box-sizing: border-box;
+}
+
+.page-card--grow {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+.page-toolbar {
+	background: #ffffff;
+	border: 1px solid #e5e5e7;
+	border-radius: 0.85vw;
+	padding: 0.85vw 1.1vw;
+	box-shadow: 0 0.2vw 1vw rgba(0, 0, 0, 0.04);
+	flex-shrink: 0;
+}
+
+.page-toolbar__row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.65vw 1vw;
+}
+
+.page-toolbar__group {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5vw 0.85vw;
+}
+
+.page-toolbar__label {
+	color: #86868b;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.page-toolbar__hint {
+	margin: 0.5vw 0 0;
+	color: #86868b;
+	line-height: 1.45;
+}
+
+.page-field select,
+.page-field input[type='text'],
+.page-field input[type='password'] {
+	padding: 0.45vw 0.65vw;
+	border: 1px solid #d2d2d7;
+	border-radius: 0.5vw;
+	color: #1d1d1f;
+	background: #ffffff;
+	font-family: inherit;
+	min-width: 10vw;
+}
+
+.page-field select:focus,
+.page-field input:focus {
+	outline: none;
+	border-color: #007aff;
+	box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
+}
+
+.page-side-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5vw;
+	padding: 0.85vw 1vw;
+	background: #ffffff;
+	border: 1px solid #e5e5e7;
+	border-radius: 0.85vw;
+	box-shadow: 0 0.25vw 1.2vw rgba(0, 0, 0, 0.05);
+	border-left: 3px solid #007aff;
+	box-sizing: border-box;
+}
+
+.page-side-card__title {
+	font-weight: 700;
+	color: #1d1d1f;
+}
+
+.page-side-card__lead {
+	margin: 0;
+	color: #86868b;
+	line-height: 1.4;
+}
+
+.page-btn {
+	border: none;
+	padding: 0.6vw 1vw;
+	border-radius: 0.5vw;
+	cursor: pointer;
+	font-weight: 600;
+	font-family: inherit;
+	width: 100%;
+	transition:
+		background 0.2s ease,
+		filter 0.2s ease;
+}
+
+.page-btn--primary {
+	background: #007aff;
+	color: #ffffff;
+}
+
+.page-btn--primary:hover:not(:disabled) {
+	background: #0066d6;
+}
+
+.page-btn--primary:disabled {
+	background: #e5e5e7;
+	color: #86868b;
+	cursor: not-allowed;
+}
+
+.page-btn--secondary {
+	background: #f5f5f7;
+	color: #1d1d1f;
+	border: 1px solid #e5e5e7;
+}
+
+.page-btn--danger-outline {
+	background: #fff;
+	color: #ff3b30;
+	border: 1px solid #ff3b30;
+	width: auto;
+	padding: 0.45vw 0.75vw;
+}
+
+.page-btn--danger-outline:hover {
+	background: #ff3b30;
+	color: #fff;
+}
+
+.page-subcard {
+	padding: 0.75vw 0.9vw;
+	border: 1px solid #e5e5e7;
+	border-radius: 0.65vw;
+	background: #fafafa;
+}
+
+.page-subcard__title {
+	font-weight: 600;
+	color: #1d1d1f;
+	margin-bottom: 0.45vw;
+}
+
+.page-stat-pill {
+	color: #86868b;
+	background: #f0f6ff;
+	border: 1px solid #d2e4ff;
+	padding: 0.2vw 0.5vw;
+	border-radius: 0.35vw;
+	font-weight: 600;
+}
+
+.page-state-card {
+	background: #ffffff;
+	border: 1px solid #e5e5e7;
+	border-radius: 1.15vw;
+	padding: 2vw;
+	text-align: center;
+	box-shadow: 0 0.35vw 1.6vw rgba(0, 0, 0, 0.06);
+	max-width: 40vw;
+}
+
+.page-state-card--error {
+	border-color: #ffc9c5;
+	color: #ff3b30;
+}
+
+.page-state-card button {
+	margin-top: 1vw;
+	padding: 0.6vw 1.2vw;
+	background: #007aff;
+	color: white;
+	border: none;
+	border-radius: 0.5vw;
+	cursor: pointer;
+	font-family: inherit;
+	font-weight: 600;
+}

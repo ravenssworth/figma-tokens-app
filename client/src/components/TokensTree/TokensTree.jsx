@@ -108,8 +108,8 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 				}`}
 			>
 				<div
-					className={`tokens-tree-item__row ${
-						isSelected ? 'selected' : isChild ? 'child-selected' : ''
+					className={`tokens-tree-item__row tokens-tree-row${
+						isSelected ? ' selected' : isChild ? ' child-selected' : ''
 					}`}
 					onClick={() => handleSelectGroup(groupPath)}
 					style={{ paddingLeft: `${group.level * 0.8 + 0.8}vw` }}
@@ -162,8 +162,8 @@ export function TokenTree({ variables, onSelectGroup, selectedGroup = 'all' }) {
 							}`}
 						>
 							<div
-								className={`tokens-tree-all-item__row ${
-									selectedGroup === 'all' ? 'selected' : ''
+								className={`tokens-tree-all-item__row tokens-tree-row${
+									selectedGroup === 'all' ? ' selected' : ''
 								}`}
 								onClick={() => handleSelectGroup('all')}
 							>

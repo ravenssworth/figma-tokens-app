@@ -19,12 +19,13 @@ const ExportPage = () => {
 
 	const [format, setFormat] = useState('css')
 	const [isExporting, setIsExporting] = useState(false)
-	const [npmPackageName, setNpmPackageName] = useState('@org/design-tokens')
+	const [npmPackageName, setNpmPackageName] = useState('')
 	const [npmPackageVersion, setNpmPackageVersion] = useState('1.0.0')
 	const [npmToken, setNpmToken] = useState('')
 	const [isPackaging, setIsPackaging] = useState(false)
 	const [isPublishing, setIsPublishing] = useState(false)
 	const [npmStatus, setNpmStatus] = useState('')
+	const [npmInstallHint, setNpmInstallHint] = useState('')
 	const [tokenTypes, setTokenTypes] = useState({
 		color: true,
 		number: true,
@@ -432,6 +433,7 @@ const ExportPage = () => {
 	const handleBuildNpmPackage = async shouldPublish => {
 		try {
 			setNpmStatus('')
+			setNpmInstallHint('')
 			if (!npmPackageName.trim()) {
 				setNpmStatus('Укажите имя npm-пакета')
 				return
@@ -466,12 +468,18 @@ const ExportPage = () => {
 			const data = await response.json()
 
 			if (!data.success) {
-				setNpmStatus(data.error || 'Не удалось собрать npm-пакет')
+				const details = data.details ? ` (${data.details})` : ''
+				setNpmStatus((data.error || 'Не удалось собрать npm-пакет') + details)
 				return
 			}
 
 			if (shouldPublish) {
 				setNpmStatus(data.message || 'Пакет опубликован')
+				if (data.installCommand) {
+					setNpmInstallHint(
+						`В другом проекте: ${data.installCommand}`,
+					)
+				}
 				return
 			}
 
@@ -491,6 +499,11 @@ const ExportPage = () => {
 			URL.revokeObjectURL(url)
 
 			setNpmStatus('npm-пакет собран и скачан')
+			setNpmInstallHint(
+				data.installCommand
+					? `В папке с .tgz: ${data.installCommand}`
+					: 'В папке с .tgz: npm install ./имя-файла.tgz',
+			)
 		} catch (error) {
 			setNpmStatus('Ошибка при сборке npm-пакета')
 			console.error('Ошибка npm package:', error)
@@ -506,57 +519,71 @@ const ExportPage = () => {
 
 	return (
 		<div className='export-page'>
-			<div className='export-page__workspace'>
-				<div className='export-page__workspace-spacer' aria-hidden='true' />
-				<div className='export-page__main'>
-						<div className='export-page__header'>
-					<div className='export-page__header-title'>
-						<h2>Экспорт дизайн токенов</h2>
-					</div>
-					<div className='export-page__collection-selector'>
-						<label htmlFor='collection-select'>Коллекция:</label>
-						<select
-							id='collection-select'
-							value={selectedCollection?.id || ''}
-							onChange={e => {
-								const collection = collections.find(
-									c => c.id === e.target.value,
-								)
-								setSelectedCollection(collection)
-							}}
-						>
-							{collections.map(collection => (
-								<option key={collection.id} value={collection.id}>
-									{collection.name}
-								</option>
-							))}
-						</select>
-						<label htmlFor='version-select'>Версия:</label>
-						<select
-							id='version-select'
-							value={selectedVersion ? String(selectedVersion.id) : ''}
-							onChange={handleVersionChange}
-						>
-							<option value=''>Выберите версию</option>
-							{versions.map(version => (
-								<option key={version.id} value={String(version.id)}>
-									{`${version.version_name} (${formatVersionTagForDisplay(version.version_tag)})`}
-								</option>
-							))}
-						</select>
-					</div>
-				</div>
-
-				{selectedVersion &&
-					!isReleaseVersionTag(selectedVersion.version_tag) && (
-						<div className='export-page__version-notice' role='status'>
-							<strong>Черновая версия.</strong> Для стабильной выдачи в прод
-							или в команду обычно выбирают снимок с тегом «релиз». Черновик
-							можно экспортировать для локальной проверки файлов.
+			<div className='page-workspace'>
+				<div className='page-workspace__main'>
+					<div className='page-toolbar'>
+						<div className='page-toolbar__row'>
+							<div className='page-toolbar__group'>
+								<label
+									className='page-toolbar__label'
+									htmlFor='collection-select'
+								>
+									Коллекция
+								</label>
+								<div className='page-field'>
+									<select
+										id='collection-select'
+										value={selectedCollection?.id || ''}
+										onChange={e => {
+											const collection = collections.find(
+												c => c.id === e.target.value,
+											)
+											setSelectedCollection(collection)
+										}}
+									>
+										{collections.map(collection => (
+											<option key={collection.id} value={collection.id}>
+												{collection.name}
+											</option>
+										))}
+									</select>
+								</div>
+								<label
+									className='page-toolbar__label'
+									htmlFor='version-select'
+								>
+									Версия
+								</label>
+								<div className='page-field'>
+									<select
+										id='version-select'
+										value={
+											selectedVersion ? String(selectedVersion.id) : ''
+										}
+										onChange={handleVersionChange}
+									>
+										<option value=''>Выберите версию</option>
+										{versions.map(version => (
+											<option key={version.id} value={String(version.id)}>
+												{`${version.version_name} (${formatVersionTagForDisplay(version.version_tag)})`}
+											</option>
+										))}
+									</select>
+								</div>
+							</div>
 						</div>
-					)}
+					</div>
 
-				<div className='export-page__panel'>
+					{selectedVersion &&
+						!isReleaseVersionTag(selectedVersion.version_tag) && (
+							<div className='export-page__version-notice' role='status'>
+								<strong>Черновая версия.</strong> Для стабильной выдачи в прод
+								или в команду обычно выбирают снимок с тегом «релиз». Черновик
+								можно экспортировать для локальной проверки файлов.
+							</div>
+						)}
+
+					<div className='page-card page-card--grow export-page__panel'>
 					<div className='export-page__top-options'>
 						<div className='export-page__format-section'>
 							<div className='export-page__format-title'>
@@ -666,19 +693,15 @@ const ExportPage = () => {
 					</div>
 				</div>
 
-				<div className='export-page__workspace-tail'>
-					<div className='export-page__right-slot'>
-						<div className='export-page__side-stack'>
-							<div className='export-page__side-card'>
-								<div className='export-page__side-card-head'>
-									<div className='export-page__side-card-title'>
-										npm-пакет
-									</div>
-									<p className='export-page__side-card-lead'>
-										Содержимое пакета совпадает с предпросмотром слева: те же
-										токены, формат и фильтры типов.
-									</p>
-									<dl className='export-page__side-meta'>
+				<aside className='page-workspace__aside'>
+					<div className='page-side-card'>
+						<div className='page-side-card__title'>npm-пакет</div>
+						<p className='page-side-card__lead'>
+							Содержимое пакета совпадает с предпросмотром. Для публикации в
+							npm нужен аккаунт на npmjs.com и токен; для локальной проверки
+							достаточно «Скачать .tgz».
+						</p>
+						<dl className='export-page__side-meta'>
 										<div className='export-page__side-meta-row'>
 											<dt>Коллекция</dt>
 											<dd>{selectedCollection?.name ?? '—'}</dd>
@@ -687,9 +710,8 @@ const ExportPage = () => {
 											<dt>Версия</dt>
 											<dd>{versionSummary}</dd>
 										</div>
-									</dl>
-								</div>
-								<label className='export-page__field-label' htmlFor='npm-pkg-name'>
+						</dl>
+						<label className='export-page__field-label' htmlFor='npm-pkg-name'>
 									Имя пакета
 								</label>
 								<input
@@ -697,7 +719,7 @@ const ExportPage = () => {
 									type='text'
 									value={npmPackageName}
 									onChange={e => setNpmPackageName(e.target.value)}
-									placeholder='@scope/design-tokens'
+									placeholder='my-design-tokens или @логин/my-tokens'
 									className='export-page__filename-input'
 								/>
 								<label
@@ -744,17 +766,21 @@ const ExportPage = () => {
 										{isPublishing ? 'Публикация...' : 'Опубликовать'}
 									</button>
 								</div>
-								{npmStatus && (
-									<div className='export-page__npm-status'>{npmStatus}</div>
-								)}
+						{npmStatus && (
+							<div className='export-page__npm-status'>{npmStatus}</div>
+						)}
+						{npmInstallHint && (
+							<div className='export-page__npm-hint'>
+								<code>{npmInstallHint}</code>
 							</div>
+						)}
+					</div>
 
-							<div className='export-page__side-card export-page__side-card--actions'>
-								<div className='export-page__side-card-title'>Файл</div>
-								<p className='export-page__side-card-lead export-page__side-card-lead--tight'>
-									Имя без расширения — одно нажатие, файл сразу сохранится в
-									загрузки.
-								</p>
+					<div className='page-side-card'>
+						<div className='page-side-card__title'>Файл</div>
+						<p className='page-side-card__lead'>
+							Имя без расширения — файл сразу сохранится в загрузки.
+						</p>
 								<label
 									className='export-page__field-label'
 									htmlFor='export-file-name'
@@ -770,25 +796,23 @@ const ExportPage = () => {
 									className='export-page__filename-input'
 									disabled={tokens.length === 0}
 								/>
-								<button
-									type='button'
-									onClick={handleExport}
-									disabled={isExporting || tokens.length === 0}
-									className='export-page__export-open-button'
-								>
-									{isExporting
-										? 'Сохранение...'
-										: `Скачать .${getFileExtension()}`}
-								</button>
-								{isExporting && (
-									<div className='export-page__progress-container'>
-										<div className='export-page__progress-bar' />
-									</div>
-								)}
+						<button
+							type='button'
+							onClick={handleExport}
+							disabled={isExporting || tokens.length === 0}
+							className='page-btn page-btn--primary'
+						>
+							{isExporting
+								? 'Сохранение...'
+								: `Скачать .${getFileExtension()}`}
+						</button>
+						{isExporting && (
+							<div className='export-page__progress-container'>
+								<div className='export-page__progress-bar' />
 							</div>
-						</div>
+						)}
 					</div>
-				</div>
+				</aside>
 			</div>
 		</div>
 	)

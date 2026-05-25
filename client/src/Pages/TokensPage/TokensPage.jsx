@@ -341,15 +341,23 @@ export function TokensPage() {
 	}, [notification])
 
 	if (loading) {
-		return <div className='loading-container'>Загрузка данных...</div>
+		return (
+			<div className='tokens-page tokens-page--state'>
+				<div className='page-state-card'>Загрузка данных…</div>
+			</div>
+		)
 	}
 
 	if (error) {
 		return (
-			<div className='error-container'>
-				<h3>Ошибка загрузки</h3>
-				<p>{error}</p>
-				<button onClick={loadData}>Повторить попытку</button>
+			<div className='tokens-page tokens-page--state'>
+				<div className='page-state-card page-state-card--error'>
+					<h3>Ошибка загрузки</h3>
+					<p>{error}</p>
+					<button type='button' onClick={loadData}>
+						Повторить попытку
+					</button>
+				</div>
 			</div>
 		)
 	}
@@ -383,65 +391,60 @@ export function TokensPage() {
 					</button>
 				</div>
 			)}
-			<div className='tokens-page__workspace'>
-				<div className='tokens-page__workspace-spacer' aria-hidden='true' />
-				<div className='tokens-page__left-column'>
-					<div className='tokens-page__page-header'>
-						<div className='tokens-page__page-header-row'>
-							<div className='tokens-page__page-header-title'>
-								<h2>Токены</h2>
-							</div>
-							{collectionVersions.length > 0 && (
-								<div className='tokens-page__version-toolbar'>
+			<div className='page-workspace'>
+				<div className='page-workspace__main'>
+					<div className='page-toolbar'>
+						{collectionVersions.length > 0 && (
+							<div className='page-toolbar__row'>
+								<div className='page-toolbar__group'>
 									<label
-										className='tokens-page__version-toolbar-label'
+										className='page-toolbar__label'
 										htmlFor='version-select'
 									>
 										Источник данных
 									</label>
-									<div className='tokens-page__version-selector-row'>
-										<div className='tokens-page__version-selector'>
-											<select
-												id='version-select'
-												value={selectedVersion?.id || 'current'}
-												onChange={e => {
-													if (e.target.value === 'current') {
-														setSelectedVersion(null)
-													} else {
-														const version = collectionVersions.find(
-															v => v.id == e.target.value
-														)
-														setSelectedVersion(version)
-													}
-												}}
-											>
-												<option value='current'>Актуальное состояние</option>
-												<optgroup label='Снимок версии (только просмотр)'>
-													{collectionVersions.map(version => (
-														<option key={version.id} value={version.id}>
-															{version.version_name}
-														</option>
-													))}
-												</optgroup>
-											</select>
-										</div>
-										{selectedVersion && (
-											<button
-												type='button'
-												className='tokens-page__version-delete-btn'
-												onClick={handleDeleteVersion}
-												title='Удалить выбранную версию'
-											>
-												Удалить
-											</button>
-										)}
+									<div className='page-field'>
+										<select
+											id='version-select'
+											value={selectedVersion?.id || 'current'}
+											onChange={e => {
+												if (e.target.value === 'current') {
+													setSelectedVersion(null)
+												} else {
+													const version = collectionVersions.find(
+														v => v.id == e.target.value
+													)
+													setSelectedVersion(version)
+												}
+											}}
+										>
+											<option value='current'>Актуальное состояние</option>
+											<optgroup label='Снимок версии (только просмотр)'>
+												{collectionVersions.map(version => (
+													<option key={version.id} value={version.id}>
+														{version.version_name}
+													</option>
+												))}
+											</optgroup>
+										</select>
 									</div>
+									{selectedVersion && (
+										<button
+											type='button'
+											className='page-btn page-btn--danger-outline'
+											onClick={handleDeleteVersion}
+											title='Удалить выбранную версию'
+										>
+											Удалить версию
+										</button>
+									)}
 								</div>
-							)}
-						</div>
-						<p className='tokens-page__source-hint'>{versionSourceHint}</p>
+							</div>
+						)}
+						<p className='page-toolbar__hint'>{versionSourceHint}</p>
 					</div>
-					<div className='tokens-page__dashboard'>
+
+					<div className='page-card page-card--grow tokens-page__dashboard'>
 						<div className='sidebar'>
 							<CollectionsPanel
 								collections={collections}
@@ -469,21 +472,15 @@ export function TokensPage() {
 					</div>
 				</div>
 
-				<div className='tokens-page__workspace-tail'>
-					<div className='tokens-page__right-slot'>
-					{showVersionActions && isVersionPanelOpen && (
-						<aside className='tokens-page__version-aside' aria-label='Создание версии'>
-							<div className='tokens-page__version-aside-inner'>
-								<div className='tokens-page__version-aside-header'>
-									<span className='tokens-page__version-aside-title'>
-										Новая версия
-									</span>
-								</div>
-								<div className='tokens-page__create-version-section'>
-									<div className='tokens-page__version-form'>
-										<label className='tokens-page__version-form-label'>
-											Название версии
-											<input
+				{showVersionActions && (
+				<aside className='page-workspace__aside'>
+					{isVersionPanelOpen && (
+						<div className='page-side-card' aria-label='Создание версии'>
+							<div className='page-side-card__title'>Новая версия</div>
+							<div className='tokens-page__version-form'>
+								<label className='tokens-page__version-form-label'>
+									Название версии
+									<input
 												type='text'
 												placeholder='Например, v.1.0'
 												value={newVersionName}
@@ -491,11 +488,11 @@ export function TokensPage() {
 												onKeyDown={e =>
 													e.key === 'Enter' && handleCreateVersion()
 												}
-											/>
-										</label>
-										<label className='tokens-page__version-form-label'>
-											Описание (необязательно)
-											<textarea
+									/>
+								</label>
+								<label className='tokens-page__version-form-label'>
+									Описание (необязательно)
+									<textarea
 												className='tokens-page__version-form-textarea'
 												placeholder='Кратко, что изменилось в этой версии'
 												value={newVersionDescription}
@@ -503,11 +500,11 @@ export function TokensPage() {
 													setNewVersionDescription(e.target.value)
 												}
 												rows={2}
-											/>
-										</label>
-										<label className='tokens-page__version-form-label'>
-											Тег
-											<select
+									/>
+								</label>
+								<label className='tokens-page__version-form-label'>
+									Тег
+									<select
 												className='tokens-page__version-form-select'
 												value={newVersionTag}
 												onChange={e => setNewVersionTag(e.target.value)}
@@ -517,47 +514,44 @@ export function TokensPage() {
 														{opt.label}
 													</option>
 												))}
-											</select>
-										</label>
-										<div className='tokens-page__version-form-buttons'>
-											<button type='button' onClick={handleCreateVersion}>
-												Создать
-											</button>
-											<button
-												type='button'
-												onClick={() => {
-													setIsVersionPanelOpen(false)
-													setNewVersionName('')
-													setNewVersionDescription('')
-													setNewVersionTag('релиз')
-												}}
-											>
-												Отмена
-											</button>
-										</div>
-									</div>
+									</select>
+								</label>
+								<div className='tokens-page__version-form-buttons'>
+									<button type='button' onClick={handleCreateVersion}>
+										Создать
+									</button>
+									<button
+										type='button'
+										onClick={() => {
+											setIsVersionPanelOpen(false)
+											setNewVersionName('')
+											setNewVersionDescription('')
+											setNewVersionTag('релиз')
+										}}
+									>
+										Отмена
+									</button>
 								</div>
 							</div>
-						</aside>
+						</div>
 					)}
-					{showVersionActions && !isVersionPanelOpen && (
-						<div className='tokens-page__side-card tokens-page__side-card--actions'>
-							<div className='tokens-page__side-card-title'>Версия коллекции</div>
-							<p className='tokens-page__side-card-lead tokens-page__side-card-lead--tight'>
-								Сохранить снимок токенов выбранной коллекции: имя, описание и тег
-								версии.
+					{!isVersionPanelOpen && (
+						<div className='page-side-card'>
+							<div className='page-side-card__title'>Версия коллекции</div>
+							<p className='page-side-card__lead'>
+								Сохранить снимок токенов: имя, описание и тег версии.
 							</p>
 							<button
 								type='button'
-								className='tokens-page__side-primary-btn'
+								className='page-btn page-btn--primary'
 								onClick={() => setIsVersionPanelOpen(true)}
 							>
 								Создать версию
 							</button>
 						</div>
 					)}
-					</div>
-				</div>
+				</aside>
+				)}
 			</div>
 		</div>
 	)

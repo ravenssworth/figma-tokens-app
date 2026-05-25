@@ -48,24 +48,39 @@
 	gap: 0.2vw;
 }
 
+.tokens-tree-item__row,
+.tokens-tree-all-item__row {
+	border: 1px solid transparent;
+}
+
 .tokens-tree-item__row {
 	display: flex;
 	align-items: center;
 	padding: 0.8vw 1.2vw;
 	cursor: pointer;
-	transition: all 0.2s ease;
-	border-left: 0.2vw solid transparent;
+	transition:
+		background 0.2s ease,
+		border-color 0.2s ease,
+		box-shadow 0.2s ease,
+		color 0.2s ease;
 	position: relative;
-	border-radius: 0 0.8vw 0.8vw 0;
+	border-radius: 0 0.65vw 0.65vw 0;
 }
 
-.tokens-tree-item__row:hover {
-	background-color: #f0f0f0;
+.tokens-tree-item__row:hover,
+.tokens-tree-all-item__row:hover {
+	background-color: #f5f5f7;
+	border-color: #e5e5e7;
 }
 
-.tokens-tree-item__row.selected {
-	border-left-color: #007aff;
-	background-color: #f0f6ff;
+.tokens-tree-row.selected,
+.tokens-tree-item__row.selected,
+.tokens-tree-all-item__row.selected {
+	background: #f0f6ff;
+	border-color: #c7deff;
+	color: #007aff;
+	font-weight: 600;
+	box-shadow: inset 0.2vw 0 0 #007aff;
 }
 
 .tokens-tree-item__row.child-selected {
@@ -188,18 +203,18 @@
 	gap: 0.5vw;
 	padding: 0.8vw 1.2vw;
 	cursor: pointer;
-	transition: all 0.2s ease;
-	border-left: 0.2vw solid transparent;
-	border-radius: 0 0.8vw 0.8vw 0;
+	transition:
+		background 0.2s ease,
+		border-color 0.2s ease,
+		box-shadow 0.2s ease,
+		color 0.2s ease;
+	border-radius: 0 0.65vw 0.65vw 0;
 }
 
-.tokens-tree-all-item__row:hover {
-	background-color: #f0f0f0;
-}
-
-.tokens-tree-all-item__row.selected {
-	border-left-color: #007aff;
-	background-color: #f0f6ff;
+.tokens-tree-row.selected .tokens-tree-item__name,
+.tokens-tree-row.selected .tokens-tree-all-item__name {
+	color: #007aff;
+	font-weight: 600;
 }
 
 .tokens-tree-all-item__name {

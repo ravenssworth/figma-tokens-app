@@ -12,6 +12,17 @@ const jwt = require('jsonwebtoken')
 const JWT_SECRET = process.env.JWT_SECRET
 const PORT = process.env.APP_PORT || 3000
 const execFileAsync = promisify(execFile)
+const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+
+function isValidNpmPackageName(name) {
+	if (!name || typeof name !== 'string') return false
+	// Scoped: @scope/name — unscoped: name
+	return /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i.test(name.trim())
+}
+
+function isValidSemver(version) {
+	return /^\d+\.\d+\.\d+(-[\w.-]+)?(\+[\w.-]+)?$/.test(String(version).trim())
+}
 
 app.use(cors())
 app.use(express.json())
@@ -695,6 +706,21 @@ app.post('/api/npm/package', async (req, res) => {
 		})
 	}
 
+	if (!isValidNpmPackageName(packageName)) {
+		return res.status(400).json({
+			success: false,
+			error:
+				'Некорректное имя пакета. Пример: my-design-tokens или @ваш-логин/my-design-tokens',
+		})
+	}
+
+	if (!isValidSemver(packageVersion)) {
+		return res.status(400).json({
+			success: false,
+			error: 'Версия должна быть в формате semver, например 1.0.0',
+		})
+	}
+
 	const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tokens-npm-'))
 	const packageDir = path.join(tempRoot, 'package')
 	const packageJsonPath = path.join(packageDir, 'package.json')
@@ -732,9 +758,14 @@ app.post('/api/npm/package', async (req, res) => {
 		await fs.writeFile(entryPath, entryFileContent, 'utf-8')
 		await fs.writeFile(indexJsPath, `${jsCssImportLine}${jsExportLine}\n`, 'utf-8')
 
-		const { stdout: packStdout } = await execFileAsync('npm', ['pack'], {
-			cwd: packageDir,
-		})
+		const { stdout: packStdout } = await execFileAsync(
+			npmCmd,
+			['pack'],
+			{
+				cwd: packageDir,
+				shell: process.platform === 'win32',
+			},
+		)
 		const tgzFileName = packStdout
 			.split('\n')
 			.map(line => line.trim())
@@ -744,21 +775,28 @@ app.post('/api/npm/package', async (req, res) => {
 		const tgzBuffer = await fs.readFile(tgzPath)
 
 		if (shouldPublish) {
-			if (!npmToken) {
+			const publishToken = npmToken || process.env.NPM_TOKEN
+			if (!publishToken) {
 				return res.status(400).json({
 					success: false,
-					error: 'Для публикации нужен npm token',
+					error:
+						'Для публикации нужен npm token (в форме или NPM_TOKEN на сервере)',
 				})
 			}
 
 			await fs.writeFile(
 				npmRcPath,
-				`//registry.npmjs.org/:_authToken=${npmToken}\n`,
+				`//registry.npmjs.org/:_authToken=${publishToken}\n`,
 				'utf-8',
 			)
 
-			await execFileAsync('npm', ['publish', '--access', 'public'], {
+			const publishArgs = packageName.startsWith('@')
+				? ['publish', '--access', 'public']
+				: ['publish']
+
+			await execFileAsync(npmCmd, publishArgs, {
 				cwd: packageDir,
+				shell: process.platform === 'win32',
 				env: {
 					...process.env,
 					NPM_CONFIG_USERCONFIG: npmRcPath,
@@ -769,6 +807,7 @@ app.post('/api/npm/package', async (req, res) => {
 				success: true,
 				message: `Пакет ${packageName}@${packageVersion} опубликован`,
 				published: true,
+				installCommand: `npm install ${packageName}@${packageVersion}`,
 			})
 		}
 
@@ -777,6 +816,7 @@ app.post('/api/npm/package', async (req, res) => {
 			message: 'Пакет собран',
 			fileName: tgzFileName,
 			fileContentBase64: tgzBuffer.toString('base64'),
+			installCommand: `npm install ./${tgzFileName}`,
 		})
 	} catch (error) {
 		console.error('Ошибка сборки/publish npm-пакета:', error)

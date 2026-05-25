@@ -347,21 +347,16 @@ export function HistoryPanel() {
 
 	if (!collections.length && !loading) {
 		return (
-			<div className='history-empty'>
-				<p>Нет коллекций. Экспортируйте токены из Figma.</p>
+			<div className='page-state-card history-panel__empty-state'>
+				<p>Нет коллекций. Экспортируйте токены из Figma через плагин.</p>
 			</div>
 		)
 	}
 
 	return (
-		<div className='history-panel'>
+		<div className='history-panel page-card page-card--grow'>
 			<div className='history-panel__header'>
 				<div className='history-panel__header-top'>
-					<div className='history-panel__header-title'>
-						<h3>История изменений</h3>
-						<span className='stat-value'>{stats.count}</span>
-					</div>
-
 					<div className='history-panel__header-controls'>
 						<div className='history-panel__collection-selector'>
 							<label htmlFor='history-collection-select'>Коллекция</label>
@@ -413,6 +408,11 @@ export function HistoryPanel() {
 								Версии
 							</button>
 						</div>
+
+						<span className='page-stat-pill'>
+							{stats.count}{' '}
+							{isTokensView ? 'изменений' : 'событий'}
+						</span>
 					</div>
 				</div>
 
@@ -486,12 +486,13 @@ export function HistoryPanel() {
 				</div>
 			</div>
 
+			<div className='history-panel__body'>
 			{loading ? (
-				<div className='history-panel__loading'>
+				<div className='history-panel__loading page-state-card'>
 					<p>Загрузка…</p>
 				</div>
 			) : activeList.length === 0 ? (
-				<div className='history-panel__empty'>
+				<div className='history-panel__empty page-state-card'>
 					<p>{emptyMessage}</p>
 				</div>
 			) : isTokensView ? (
@@ -712,6 +713,7 @@ export function HistoryPanel() {
 					))}
 				</div>
 			)}
+			</div>
 		</div>
 	)
 }

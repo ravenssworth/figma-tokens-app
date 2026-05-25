@@ -3,6 +3,24 @@ import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import { useProject } from '../../context/ProjectContext'
 import './Layout.css'
 
+const NAV_ITEMS = [
+	{ path: '/tokens', label: 'Токены' },
+	{ path: '/history', label: 'История' },
+	{ path: '/export', label: 'Экспорт' },
+]
+
+function getPageTitle(pathname) {
+	if (pathname === '/tokens') return 'Токены'
+	if (pathname === '/history') return 'История изменений'
+	if (pathname === '/export') return 'Экспорт'
+	return 'Рабочая область'
+}
+
+function getUserInitial(user) {
+	const name = user?.username || user?.email || '?'
+	return String(name).charAt(0).toUpperCase()
+}
+
 export function Layout() {
 	const location = useLocation()
 	const navigate = useNavigate()
@@ -30,80 +48,109 @@ export function Layout() {
 		navigate('/auth')
 	}
 
+	const handleAllProjects = () => {
+		clearProject()
+	}
+
+	const pageTitle = getPageTitle(location.pathname)
+
 	return (
 		<div className='layout'>
-			<header className='layout__header'>
-				<div className='layout__header-left'>
+			<aside className='layout-sidebar' aria-label='Навигация'>
+				<div className='layout-sidebar__top'>
+					<div className='layout-sidebar__brand'>
+						<span className='layout-sidebar__brand-mark' aria-hidden='true' />
+						<div className='layout-sidebar__brand-text'>
+							<span className='layout-sidebar__brand-title'>Design Tokens</span>
+							<span className='layout-sidebar__brand-sub'>Figma → Web</span>
+						</div>
+					</div>
+
 					{project && (
-						<div className='layout__project-info'>
-							<span className='layout__project-label'>Проект:</span>
-							<span className='layout__project-name'>{project.name}</span>
-							<button
-								type='button'
-								className='layout__switch-project-btn'
-								onClick={() => navigate('/projects')}
-							>
-								Сменить
-							</button>
+						<div className='layout-sidebar__project'>
+							<span className='layout-sidebar__project-label'>
+								Текущий проект
+							</span>
+							<p className='layout-sidebar__project-name' title={project.name}>
+								{project.name}
+							</p>
 						</div>
 					)}
 				</div>
-				{user ? (
-					<div className='layout__user-info'>
-						<span className='layout__username'>
-							{user.username || user.email}
-						</span>
-						<button onClick={handleLogout} className='layout__logout-btn'>
-							Выйти
-						</button>
-					</div>
-				) : (
-					<Link to='/auth' className='layout__auth-link'>
-						Войти
-					</Link>
-				)}
-			</header>
-			<div className='layout__body'>
-				<div className='content-area'></div>
-				<nav className='layout__navigation'>
-					<div className='layout__nav-menu'>
+
+				<nav className='layout-sidebar__nav'>
+					{NAV_ITEMS.map(item => (
 						<Link
-							to='/tokens'
-							className={`nav-link ${
-								location.pathname === '/tokens' ? 'active' : ''
+							key={item.path}
+							to={item.path}
+							className={`layout-nav-link${
+								location.pathname === item.path
+									? ' layout-nav-link--active'
+									: ''
 							}`}
 						>
-							<span>Токены</span>
+							{item.label}
 						</Link>
-						<Link
-							to='/history'
-							className={`nav-link ${
-								location.pathname === '/history' ? 'active' : ''
-							}`}
-						>
-							<span>История изменений</span>
-						</Link>
-						<Link
-							to='/export'
-							className={`nav-link ${
-								location.pathname === '/export' ? 'active' : ''
-							}`}
-						>
-							<span>Экспорт</span>
-						</Link>
-					</div>
-					<div className='nav-footer'>
-						<button
-							type='button'
-							className='layout__exit-project-btn'
-							onClick={clearProject}
-						>
-							К списку проектов
-						</button>
-					</div>
+					))}
 				</nav>
-				<main className='content'>
-					<Outlet />
+
+				<div className='layout-sidebar__footer'>
+					<button
+						type='button'
+						className='layout-sidebar__projects-btn'
+						onClick={handleAllProjects}
+					>
+						Все проекты
+					</button>
+				</div>
+			</aside>
+
+			<div className='layout-main'>
+				<header className='layout-header'>
+					<div className='layout-header__context'>
+						<span className='layout-header__eyebrow'>Рабочая область</span>
+						<h1 className='layout-header__title'>{pageTitle}</h1>
+					</div>
+
+					<div className='layout-header__actions'>
+						{user ? (
+							<>
+								<div className='layout-user-card'>
+									<span
+										className='layout-user-card__avatar'
+										aria-hidden='true'
+									>
+										{getUserInitial(user)}
+									</span>
+									<div className='layout-user-card__text'>
+										<span className='layout-user-card__name'>
+											{user.username || 'Пользователь'}
+										</span>
+										<span className='layout-user-card__email'>
+											{user.email}
+										</span>
+									</div>
+								</div>
+								<button
+									type='button'
+									className='layout-btn layout-btn--secondary'
+									onClick={handleLogout}
+								>
+									Выйти
+								</button>
+							</>
+						) : (
+							<Link to='/auth' className='layout-btn layout-btn--primary'>
+								Войти
+							</Link>
+						)}
+					</div>
+				</header>
+
+				<main className='layout-content'>
+					<div className='layout-content__stage'>
+						<Outlet />
+					</div>
 				</main>
 			</div>
 		</div>
